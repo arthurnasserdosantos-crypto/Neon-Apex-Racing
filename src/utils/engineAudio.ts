@@ -159,6 +159,80 @@ export const CAR_SOUND_TUNINGS: Record<string, CarSoundTuning> = {
     brakeGainMultiplier: 1.35,
     brakeSquealGainMultiplier: 0.4,
   },
+
+  // Tempest GT3-R: 4.0L Flat-Plane Crank V8 Homologation Circuit Racer
+  // Metallic mechanical rasp, crisp sequential transaxle coasting whine, rapid firecracker GT3 downshift burbles,
+  // and biting carbon-steel endurance brake shimmer
+  tempest_gt3: {
+    f0Base: 48,
+    f0RpmMultiplier: 195,
+    f0SpeedMultiplier: 22,
+    subRatio: 0.5,
+    mainRatio: 1.0,
+    harmRatio: 2.5, // Snarling flat-plane octave + fifth racing bark
+    subGainVal: 0.48,
+    mainGainVal: 0.52,
+    harmGainVal: 0.38,
+    turboWhistleGain: 0.04, // Subtle dry-sump & intake plenum whistle
+    turboWhistleFreq: 2650,
+    filterBaseIdle: 280,
+    filterBaseAccel: 460,
+    filterRpmSpan: 2850,
+    filterQ: 2.8,
+    accelGainBase: 0.28,
+    accelGainRpm: 0.25,
+    decelWhineBase: 320, // Crisp straight-cut sequential GT3 transaxle whine
+    decelWhineSpan: 560,
+    decelWhineQ: 3.1,
+    decelLfoRate: 19.5, // Punchy GT3 exhaust overrun pops
+    decelOverrunFilterCut: 390,
+    decelOverrunQ: 4.0,
+    decelStrengthMultiplier: 1.18,
+    brakePadFreqBase: 1080, // Slotted endurance rotors air bite
+    brakePadFreqSpan: 950,
+    brakePadQ: 1.9,
+    brakeSquealFreqBase: 2580, // Metallic GT3 endurance caliper shimmer
+    brakeSquealQ: 13.0,
+    brakeGainMultiplier: 1.22,
+    brakeSquealGainMultiplier: 1.05,
+  },
+
+  // Hyperion LM-X: Twin-Supercharged Le Mans Carbon Hyper-Prototype
+  // Intense centrifugal supercharger + hybrid KERS whine on accel, futuristic electric regen coasting howl,
+  // and ultra-high-frequency carbon-carbon prototype brake sing
+  hyperion_lm: {
+    f0Base: 44,
+    f0RpmMultiplier: 215,
+    f0SpeedMultiplier: 28,
+    subRatio: 0.5,
+    mainRatio: 1.0,
+    harmRatio: 3.01, // Piercing prototype choir + detuned overtone shimmer
+    subGainVal: 0.55,
+    mainGainVal: 0.44,
+    harmGainVal: 0.48,
+    turboWhistleGain: 0.26, // Unmistakable twin-supercharger + KERS scream
+    turboWhistleFreq: 3850,
+    filterBaseIdle: 260,
+    filterBaseAccel: 540,
+    filterRpmSpan: 3900,
+    filterQ: 3.6,
+    accelGainBase: 0.29,
+    accelGainRpm: 0.30,
+    decelWhineBase: 460, // High-pitched hybrid KERS energy recovery coasting turbine
+    decelWhineSpan: 820,
+    decelWhineQ: 4.2,
+    decelLfoRate: 11.0, // Deep ultrasonic prototype compression pulse
+    decelOverrunFilterCut: 520,
+    decelOverrunQ: 3.6,
+    decelStrengthMultiplier: 1.32,
+    brakePadFreqBase: 720, // Ground-effect carbon-carbon rotor air vacuum
+    brakePadFreqSpan: 1180,
+    brakePadQ: 1.5,
+    brakeSquealFreqBase: 3420, // Razor-sharp Le Mans carbon-carbon brake howl
+    brakeSquealQ: 18.0,
+    brakeGainMultiplier: 1.4,
+    brakeSquealGainMultiplier: 1.25,
+  },
 };
 
 function createSoftClipCurve(amount = 1.6): Float32Array<ArrayBuffer> {

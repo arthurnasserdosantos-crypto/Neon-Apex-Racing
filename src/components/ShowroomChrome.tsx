@@ -1,10 +1,12 @@
 import React from 'react';
-import { Radio, ShieldAlert, Trophy, Wallet, Zap } from 'lucide-react';
+import { Gamepad2, Radio, ShieldAlert, Trophy, Wallet, Zap } from 'lucide-react';
 import { useGameStore } from '../store';
+import { engineAudio } from '../utils/engineAudio';
 import { getBlacklistRankSummary, getProgressionStatus } from '../utils/raceTracks';
 import { getCarDefinition } from '../utils/carCatalog';
 
 export function PlayerRapSheet() {
+  const setAppStationMode = useGameStore((s) => s.setAppStationMode);
   const driverAlias = useGameStore((s) => s.driverAlias);
   const cash = useGameStore((s) => s.cash);
   const completedRaces = useGameStore((s) => s.completedRaces);
@@ -109,6 +111,22 @@ export function PlayerRapSheet() {
             />
           </div>
         </div>
+
+        {/* Angled Slash Divider */}
+        <span className="text-[#3A3E45] font-mono text-base font-bold hidden sm:inline select-none">/</span>
+
+        {/* Module 5: Game Station Quick Launcher */}
+        <button
+          type="button"
+          onClick={() => {
+            engineAudio.playUiClick();
+            setAppStationMode('STATION');
+          }}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#181C24] hover:bg-gradient-to-r hover:from-[#FF8C00] hover:to-[#FF5500] border border-[#3A3E45] hover:border-[#FFAA33] text-[#8E96A4] hover:text-[#0D0F14] text-[10px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer shadow-sm"
+        >
+          <Gamepad2 className="w-3.5 h-3.5 text-[#FF8C00] group-hover:text-[#0D0F14]" />
+          <span>Game Station</span>
+        </button>
       </div>
     </header>
   );

@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  CarFront,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   Crown,
   Flag,
+  Gamepad2,
   Lock,
   LogOut,
   RotateCcw,
@@ -43,6 +45,7 @@ function formatOrdinal(pos: number): string {
 }
 
 export function HUD() {
+  const setAppStationMode = useGameStore((s) => s.setAppStationMode);
   const setView = useGameStore((s) => s.setView);
   const openCarLot = useGameStore((s) => s.openCarLot);
   const view = useGameStore((s) => s.view);
@@ -62,6 +65,7 @@ export function HUD() {
   const racePlacement = useGameStore((s) => s.racePlacement);
   const currentReward = useGameStore((s) => s.currentReward);
   const justUnlockedAct2 = useGameStore((s) => s.justUnlockedAct2);
+  const justUnlockedAct3 = useGameStore((s) => s.justUnlockedAct3);
   const justCompletedGame = useGameStore((s) => s.justCompletedGame);
   const completedRaces = useGameStore((s) => s.completedRaces);
   const cash = useGameStore((s) => s.cash);
@@ -70,8 +74,11 @@ export function HUD() {
   const togglePause = useGameStore((s) => s.togglePause);
   const resumeRace = useGameStore((s) => s.resumeRace);
   const restartRace = useGameStore((s) => s.restartRace);
+  const trafficCount = useGameStore((s) => s.trafficCount);
+  const setTrafficCount = useGameStore((s) => s.setTrafficCount);
 
   const [controlsOpen, setControlsOpen] = useState(true);
+  const [trafficMenuOpen, setTrafficMenuOpen] = useState(false);
   const [audioMuted, setAudioMuted] = useState(() => engineAudio.isMuted());
   const [activeBeacon, setActiveBeacon] = useState<WorldBeacon | null>(null);
   const activeBeaconRef = useRef<WorldBeacon | null>(null);
@@ -294,6 +301,19 @@ export function HUD() {
           <div className="flex flex-wrap items-center gap-2 pointer-events-auto">
             <button
               type="button"
+              onClick={() => {
+                engineAudio.playUiClick();
+                setAppStationMode('STATION');
+              }}
+              title="Return to Game Station Hub"
+              className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-[#FF8C00] to-[#FF5500] hover:brightness-110 text-[#0D0F14] text-[11px] font-bold uppercase tracking-widest transition-all rounded-sm shadow-lg cursor-pointer"
+            >
+              <Gamepad2 className="w-3.5 h-3.5" />
+              <span>Station</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setView('MENU')}
               className="flex items-center gap-2 px-3.5 py-2 bg-zinc-950/90 border border-white/15 hover:border-orange-500 text-zinc-200 hover:text-orange-400 text-[11px] font-bold uppercase tracking-widest transition-colors rounded-sm shadow-lg"
             >
@@ -330,7 +350,72 @@ export function HUD() {
               )}
               <span>{audioMuted ? 'Muted' : 'Audio (V)'}</span>
             </button>
+
+            {view === 'FREE_ROAM' && (
+              <button
+                type="button"
+                onClick={() => {
+                  engineAudio.playUiClick();
+                  setTrafficMenuOpen((prev) => !prev);
+                }}
+                title="Adjust Free Roam Traffic Count"
+                className={`flex items-center gap-1.5 px-3 py-2 border text-[11px] font-bold uppercase tracking-widest transition-colors rounded-sm shadow-lg cursor-pointer ${
+                  trafficMenuOpen
+                    ? 'bg-orange-500/20 border-orange-500 text-orange-300'
+                    : 'bg-zinc-950/90 border-white/15 hover:border-orange-500 text-zinc-300 hover:text-orange-400'
+                }`}
+              >
+                <CarFront className="w-3.5 h-3.5 text-orange-400" />
+                <span>Traffic: {trafficCount}</span>
+              </button>
+            )}
           </div>
+
+          {view === 'FREE_ROAM' && trafficMenuOpen && (
+            <div className="bg-zinc-950/95 p-3.5 rounded-sm border border-orange-500/40 pointer-events-auto shadow-2xl w-[250px] space-y-2.5">
+              <div className="flex items-center justify-between text-[10px] font-mono font-bold uppercase tracking-wider">
+                <span className="text-zinc-400">Free Roam Traffic</span>
+                <span className="text-orange-400 tabular-nums">
+                  {trafficCount === 0 ? 'OFF' : `${trafficCount} CARS`}
+                </span>
+              </div>
+              <div className="grid grid-cols-5 gap-1">
+                {[
+                  { label: '0', count: 0 },
+                  { label: '12', count: 12 },
+                  { label: '24', count: 24 },
+                  { label: '40', count: 40 },
+                  { label: '60', count: 60 },
+                ].map((preset) => (
+                  <button
+                    key={preset.count}
+                    type="button"
+                    onClick={() => {
+                      engineAudio.playUiClick();
+                      setTrafficCount(preset.count);
+                    }}
+                    className={`py-1 rounded-sm border text-[10px] font-mono font-bold cursor-pointer ${
+                      trafficCount === preset.count
+                        ? 'bg-orange-500 border-orange-400 text-black'
+                        : 'bg-zinc-900 border-white/10 text-zinc-300 hover:border-orange-500/50'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={60}
+                step={2}
+                value={trafficCount}
+                onChange={(e) => setTrafficCount(Number(e.target.value))}
+                aria-label="Traffic Count"
+                className="w-full accent-orange-500 cursor-pointer"
+              />
+            </div>
+          )}
 
           {controlsOpen && (
             <div className="bg-zinc-950/90 p-3.5 rounded-sm border border-white/15 pointer-events-auto shadow-xl min-w-[205px]">
@@ -647,7 +732,7 @@ export function HUD() {
               Championship Victory
             </h2>
             <p className="text-xs md:text-sm text-zinc-300 mb-6">
-              You conquered Act 1 &amp; Act 2 and defeated the Apex Sovereign in the Grand Finale!
+              You conquered Act I, Act II &amp; all 7 Blacklist Bosses — defeating Omega Prime in the Grand Finale!
             </p>
 
             <div className="grid grid-cols-3 gap-3 mb-7 text-left">
@@ -717,6 +802,13 @@ export function HUD() {
               </div>
             )}
 
+            {justUnlockedAct3 && (
+              <div className="mb-4 px-3 py-2 bg-amber-500/15 border border-amber-400/60 rounded-sm flex items-center justify-center gap-2 text-xs font-mono font-bold uppercase tracking-wider text-amber-300">
+                <Crown className="w-4 h-4 text-amber-400" />
+                <span>Boss 2 Defeated · Act 3 Overlord Gauntlet Unlocked!</span>
+              </div>
+            )}
+
             <div className="text-[11px] font-mono uppercase tracking-[0.25em] text-orange-400 mb-1">
               {raceTitle} · {raceLaps} {raceLaps === 1 ? 'Lap' : 'Laps'}
             </div>
@@ -725,10 +817,14 @@ export function HUD() {
             </h2>
             <p className="text-xs text-zinc-400 mb-6">
               {raceIsBoss && racePlacement !== 1
-                ? 'Boss escaped! Finish 1st in the 1v1 duel to claim victory and unlock the next Act.'
+                ? 'Boss escaped! Finish 1st in the 1v1 duel to claim victory and advance.'
                 : racePlacement === 1
-                ? justUnlockedAct2
-                  ? 'Races 5–9 and the Final Boss path in Act 2 are now open!'
+                ? justUnlockedAct3
+                  ? 'Act 3 Overlord Boss Gauntlet (Bosses 3–7) is now open!'
+                  : justUnlockedAct2
+                  ? 'Races 5–9 and Boss 2 in Act 2 are now open!'
+                  : activeTrack.act === 3
+                  ? `Overlord defeated (${progression.act3Wins}/${progression.act3Total} Act 3 Bosses cleared).`
                   : `Act ${activeTrack.act} victory recorded (${
                       activeTrack.act === 1
                         ? `${progression.act1Wins}/${progression.act1Total}`
@@ -764,7 +860,9 @@ export function HUD() {
                   className="w-full flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-400 text-black font-black py-3 text-xs uppercase tracking-widest rounded-sm transition-colors"
                 >
                   <span>
-                    {justUnlockedAct2
+                    {justUnlockedAct3
+                      ? `Enter Act 3 Boss 3: ${nextUnlockedTrack.title}`
+                      : justUnlockedAct2
                       ? `Continue to Act 2: ${nextUnlockedTrack.title}`
                       : `Next Race: ${nextUnlockedTrack.title}`}
                   </span>
@@ -854,6 +952,22 @@ export function HUD() {
                 <div className="text-center" style={{ transform: 'skewX(15deg)' }}>
                   <span className="font-[family-name:var(--font-display)] italic font-bold uppercase text-base md:text-lg tracking-wider text-[#F4F4F4] group-hover:text-[#0D0E10] transition-colors">
                     QUIT TO MAIN MENU
+                  </span>
+                </div>
+              </div>
+
+              {/* EXIT TO GAME STATION BUTTON */}
+              <div
+                onClick={() => {
+                  engineAudio.playUiClick();
+                  setAppStationMode('STATION');
+                }}
+                className="group relative cursor-pointer bg-[#1A1C20] hover:bg-[#FF9900] border border-[#3A3E45] hover:border-[#FF9900] px-6 py-4 transition-all duration-200 transform hover:translate-x-1"
+                style={{ transform: 'skewX(-15deg)' }}
+              >
+                <div className="text-center" style={{ transform: 'skewX(15deg)' }}>
+                  <span className="font-[family-name:var(--font-display)] italic font-bold uppercase text-base md:text-lg tracking-wider text-[#F4F4F4] group-hover:text-[#0D0E10] transition-colors">
+                    EXIT TO GAME STATION
                   </span>
                 </div>
               </div>

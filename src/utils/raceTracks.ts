@@ -20,9 +20,9 @@ export interface BossProfile {
 
 export interface RaceTrackDefinition {
   id: string;
-  act: 1 | 2;
-  raceNumber: number; // 1..4 for Act 1 standard, 5 for Boss 1; 5..9 for Act 2 standard, 10 for Final Boss
-  order: number; // 1..11
+  act: 1 | 2 | 3;
+  raceNumber: number; // Sequential display number within career
+  order: number; // 1..16
   isBoss: boolean;
   isFinalBoss?: boolean;
   title: string;
@@ -54,7 +54,8 @@ export interface BuiltRaceTrack extends RaceTrackDefinition {
 }
 
 export const ACT1_BOSS_ID = 'act1-boss';
-export const FINAL_BOSS_ID = 'act2-boss';
+export const ACT2_BOSS_ID = 'act2-boss';
+export const FINAL_BOSS_ID = 'act3-final';
 
 export const RACE_TRACK_DEFINITIONS: readonly RaceTrackDefinition[] = [
   // ==================== ACT 1: RACES 1-4 + BOSS 1 ====================
@@ -277,27 +278,27 @@ export const RACE_TRACK_DEFINITIONS: readonly RaceTrackDefinition[] = [
     order: 8,
     isBoss: false,
     title: 'Coastal Chicane Run',
-    difficulty: 'Hard',
+    difficulty: 'Medium',
     laps: 2,
-    roadWidth: 16,
+    roadWidth: 18,
     reward: 6500,
-    aiSpeedsKph: [202, 190],
-    cornerSeverityLabel: 'Fast Chicanes',
-    description: 'High-commitment coastal highway broken by quick sequential braking chicanes.',
+    aiSpeedsKph: [176, 166],
+    cornerSeverityLabel: 'Flowing Chicanes',
+    description: 'Coastal highway featuring wide, flowing chicanes and generous overtaking lanes.',
     controlPoints: [
       [0, 22],
       [0, -72],
-      [-48, -124],
-      [6, -172],
-      [74, -142],
-      [136, -174],
-      [168, -108],
-      [112, -58],
-      [152, 14],
-      [96, 76],
-      [42, 42],
-      [18, 88],
-      [0, 54],
+      [-44, -120],
+      [8, -168],
+      [72, -142],
+      [132, -166],
+      [162, -104],
+      [116, -54],
+      [148, 12],
+      [100, 68],
+      [46, 62],
+      [16, 76],
+      [0, 52],
     ],
   },
   {
@@ -307,28 +308,28 @@ export const RACE_TRACK_DEFINITIONS: readonly RaceTrackDefinition[] = [
     order: 9,
     isBoss: false,
     title: 'Foundry Technical',
-    difficulty: 'Pro',
-    laps: 3,
-    roadWidth: 15.5,
+    difficulty: 'Hard',
+    laps: 2,
+    roadWidth: 18.5,
     reward: 8200,
-    aiSpeedsKph: [214, 202],
-    cornerSeverityLabel: 'Technical Complex',
-    description: 'Three-lap endurance test through narrow curbs and relentless corner sequences.',
+    aiSpeedsKph: [184, 174],
+    cornerSeverityLabel: 'Sweeping Technical',
+    description: 'Two-lap technical circuit with widened asphalt and smooth, forgiving corner transitions.',
     controlPoints: [
       [0, 22],
       [0, -64],
-      [48, -96],
-      [20, -150],
-      [-44, -140],
-      [-78, -196],
-      [14, -214],
-      [98, -176],
-      [142, -112],
-      [92, -56],
-      [144, 10],
-      [112, 74],
-      [50, 52],
-      [26, 94],
+      [46, -98],
+      [18, -146],
+      [-42, -148],
+      [-64, -196],
+      [14, -212],
+      [96, -176],
+      [138, -112],
+      [96, -54],
+      [140, 10],
+      [110, 72],
+      [58, 66],
+      [26, 82],
       [0, 54],
     ],
   },
@@ -339,49 +340,48 @@ export const RACE_TRACK_DEFINITIONS: readonly RaceTrackDefinition[] = [
     order: 10,
     isBoss: false,
     title: 'Apex Grand Prix',
-    difficulty: 'Pro',
-    laps: 3,
-    roadWidth: 16,
+    difficulty: 'Hard',
+    laps: 2,
+    roadWidth: 18.5,
     reward: 10500,
-    aiSpeedsKph: [224, 212],
-    cornerSeverityLabel: 'GP Esses + Hairpins',
-    description: 'Final Act 2 qualifier before the title bout. Master every apex at 220+ KPH.',
+    aiSpeedsKph: [192, 182],
+    cornerSeverityLabel: 'Fast GP Esses',
+    description: 'Two-lap Act 2 qualifier before the title bout with wide racing lines and balanced pace.',
     controlPoints: [
       [0, 22],
       [0, -68],
-      [-48, -112],
-      [-88, -86],
-      [-114, -148],
-      [-60, -198],
+      [-50, -112],
+      [-86, -104],
+      [-108, -152],
+      [-56, -198],
       [34, -192],
-      [118, -152],
-      [134, -84],
-      [76, -52],
-      [128, -2],
-      [108, 70],
-      [48, 48],
-      [32, 92],
+      [116, -152],
+      [132, -84],
+      [84, -48],
+      [126, 0],
+      [106, 68],
+      [56, 64],
+      [28, 80],
       [0, 54],
     ],
   },
   {
-    id: FINAL_BOSS_ID,
+    id: ACT2_BOSS_ID,
     act: 2,
     raceNumber: 10,
     order: 11,
     isBoss: true,
-    isFinalBoss: true,
-    title: 'Sovereign Championship Finale',
+    title: 'Sovereign Syndicate Showdown',
     difficulty: 'Boss',
     laps: 3,
-    roadWidth: 15.5,
-    reward: 15000,
-    aiSpeedsKph: [238, 238],
-    cornerSeverityLabel: 'Final Boss Circuit',
-    description: '1v1 Grand Finale against the Apex Sovereign for the Horizon Championship Crown.',
+    roadWidth: 16.5,
+    reward: 12000,
+    aiSpeedsKph: [232, 232],
+    cornerSeverityLabel: 'Act 2 Boss Circuit',
+    description: '1v1 Act 2 Finale against the Apex Sovereign to unlock the 5-Boss Blacklist Overlord Gauntlet.',
     bossProfile: {
       name: 'Apex Sovereign',
-      title: 'Grand Champion Final Boss',
+      title: 'Act 2 Syndicate Boss (#2)',
       bodyColor: '#eab308',
       accentColor: '#ffffff',
       wheelsColor: '#f8fafc',
@@ -405,6 +405,215 @@ export const RACE_TRACK_DEFINITIONS: readonly RaceTrackDefinition[] = [
       [0, 56],
     ],
   },
+
+  // ==================== ACT 3: BLACKLIST OVERLORD GAUNTLET (BOSSES 3-7) ====================
+  {
+    id: 'act3-boss1',
+    act: 3,
+    raceNumber: 11,
+    order: 12,
+    isBoss: true,
+    title: 'Crimson Canyon Duel',
+    difficulty: 'Boss',
+    laps: 2,
+    roadWidth: 18.0,
+    reward: 13500,
+    aiSpeedsKph: [248, 248],
+    cornerSeverityLabel: 'Boss 3 · High-Speed Sweepers',
+    description: '1v1 Blacklist Boss Duel vs Valkyrie Cross through sweeping canyon curves.',
+    bossProfile: {
+      name: 'Valkyrie Cross',
+      title: 'Blacklist Overlord · Boss #3',
+      bodyColor: '#ec4899',
+      accentColor: '#fbcfe8',
+      wheelsColor: '#18181b',
+      underglowColor: '#f472b6',
+    },
+    controlPoints: [
+      [0, 24],
+      [0, -90],
+      [48, -148],
+      [124, -142],
+      [158, -76],
+      [118, -16],
+      [154, 48],
+      [108, 108],
+      [24, 98],
+      [-64, 104],
+      [-118, 42],
+      [-86, -34],
+      [-34, -22],
+      [0, 62],
+    ],
+  },
+  {
+    id: 'act3-boss2',
+    act: 3,
+    raceNumber: 12,
+    order: 13,
+    isBoss: true,
+    title: 'Titanium Ring Circuit',
+    difficulty: 'Boss',
+    laps: 2,
+    roadWidth: 18.0,
+    reward: 15500,
+    aiSpeedsKph: [265, 265],
+    cornerSeverityLabel: 'Boss 4 · Technical Ring',
+    description: '1v1 Blacklist Boss Duel vs Dante Solari in his homologated GT3 executioner.',
+    bossProfile: {
+      name: 'Dante Solari',
+      title: 'GT3 Executioner · Boss #4',
+      bodyColor: '#10b981',
+      accentColor: '#a7f3d0',
+      wheelsColor: '#fbbf24',
+      underglowColor: '#34d399',
+    },
+    controlPoints: [
+      [0, 24],
+      [0, -92],
+      [-58, -144],
+      [-132, -118],
+      [-146, -42],
+      [-94, 8],
+      [-136, 68],
+      [-74, 122],
+      [18, 114],
+      [104, 118],
+      [148, 52],
+      [116, -24],
+      [142, -98],
+      [78, -144],
+      [22, -96],
+      [0, 64],
+    ],
+  },
+  {
+    id: 'act3-boss3',
+    act: 3,
+    raceNumber: 13,
+    order: 14,
+    isBoss: true,
+    title: 'Obsidian Spiral GP',
+    difficulty: 'Boss',
+    laps: 2,
+    roadWidth: 18.5,
+    reward: 18000,
+    aiSpeedsKph: [282, 282],
+    cornerSeverityLabel: 'Boss 5 · Wangan Velocity',
+    description: '1v1 Blacklist Boss Duel vs Kurogane Zero on an ultra-fast midnight expressway.',
+    bossProfile: {
+      name: 'Kurogane Zero',
+      title: 'Wangan Phantom · Boss #5',
+      bodyColor: '#0284c7',
+      accentColor: '#38bdf8',
+      wheelsColor: '#e2e8f0',
+      underglowColor: '#0ea5e9',
+    },
+    controlPoints: [
+      [0, 24],
+      [0, -104],
+      [-42, -172],
+      [-126, -182],
+      [-172, -114],
+      [-138, -32],
+      [-168, 46],
+      [-112, 118],
+      [-28, 126],
+      [68, 124],
+      [148, 72],
+      [172, -18],
+      [126, -98],
+      [158, -168],
+      [82, -198],
+      [22, -142],
+      [0, 68],
+    ],
+  },
+  {
+    id: 'act3-boss4',
+    act: 3,
+    raceNumber: 14,
+    order: 15,
+    isBoss: true,
+    title: 'Sovereign Ridge Loop',
+    difficulty: 'Boss',
+    laps: 2,
+    roadWidth: 18.5,
+    reward: 21000,
+    aiSpeedsKph: [298, 298],
+    cornerSeverityLabel: 'Boss 6 · Hyper Ridge',
+    description: '1v1 Blacklist Boss Duel vs Baron Volkov. Stage 6–7 hardware strongly advised.',
+    bossProfile: {
+      name: 'Baron Volkov',
+      title: 'Syndicate Enforcer · Boss #6',
+      bodyColor: '#f59e0b',
+      accentColor: '#fef08a',
+      wheelsColor: '#18181b',
+      underglowColor: '#fbbf24',
+    },
+    controlPoints: [
+      [0, 24],
+      [0, -110],
+      [62, -168],
+      [146, -164],
+      [184, -84],
+      [134, -12],
+      [178, 68],
+      [112, 134],
+      [24, 128],
+      [-58, 138],
+      [-144, 96],
+      [-174, 12],
+      [-126, -56],
+      [-162, -138],
+      [-92, -192],
+      [-24, -144],
+      [0, 72],
+    ],
+  },
+  {
+    id: FINAL_BOSS_ID,
+    act: 3,
+    raceNumber: 15,
+    order: 16,
+    isBoss: true,
+    isFinalBoss: true,
+    title: 'Apex Zenith Finale',
+    difficulty: 'Boss',
+    laps: 3,
+    roadWidth: 19.0,
+    reward: 30000,
+    aiSpeedsKph: [315, 315],
+    cornerSeverityLabel: 'Boss 7 · Grand Championship',
+    description: '1v1 Ultimate Showdown against Omega Prime for total Neon Apex supremacy.',
+    bossProfile: {
+      name: 'Omega Prime',
+      title: 'Undisputed Emperor · Final Boss #7',
+      bodyColor: '#dc2626',
+      accentColor: '#facc15',
+      wheelsColor: '#f8fafc',
+      underglowColor: '#ef4444',
+    },
+    controlPoints: [
+      [0, 26],
+      [0, -118],
+      [-56, -184],
+      [-144, -188],
+      [-192, -104],
+      [-146, -18],
+      [-186, 68],
+      [-118, 146],
+      [-26, 136],
+      [64, 148],
+      [152, 98],
+      [194, 8],
+      [144, -68],
+      [176, -156],
+      [98, -214],
+      [26, -166],
+      [0, 76],
+    ],
+  },
 ] as const;
 
 export const ACT1_STANDARD_IDS = RACE_TRACK_DEFINITIONS.filter(
@@ -413,6 +622,10 @@ export const ACT1_STANDARD_IDS = RACE_TRACK_DEFINITIONS.filter(
 
 export const ACT2_STANDARD_IDS = RACE_TRACK_DEFINITIONS.filter(
   (t) => t.act === 2 && !t.isBoss,
+).map((t) => t.id);
+
+export const ACT3_BOSS_IDS = RACE_TRACK_DEFINITIONS.filter(
+  (t) => t.act === 3,
 ).map((t) => t.id);
 
 export interface RaceCompletionRecord {
@@ -428,6 +641,11 @@ export interface ProgressionStatus {
   act2Unlocked: boolean;
   act2Wins: number;
   act2Total: number;
+  boss2Unlocked: boolean;
+  boss2Defeated: boolean;
+  act3Unlocked: boolean;
+  act3Wins: number;
+  act3Total: number;
   finalBossUnlocked: boolean;
   finalBossDefeated: boolean;
 }
@@ -443,7 +661,13 @@ export function getProgressionStatus(
 
   const act2Unlocked = boss1Defeated;
   const act2Wins = ACT2_STANDARD_IDS.filter(isWon).length;
-  const finalBossUnlocked = act2Unlocked && act2Wins === ACT2_STANDARD_IDS.length;
+  const boss2Unlocked = act2Unlocked && act2Wins === ACT2_STANDARD_IDS.length;
+  const boss2Defeated = isWon(ACT2_BOSS_ID);
+
+  const act3Unlocked = boss2Defeated;
+  const act3Wins = ACT3_BOSS_IDS.filter(isWon).length;
+  const prereqFinalId = ACT3_BOSS_IDS.length >= 2 ? ACT3_BOSS_IDS[ACT3_BOSS_IDS.length - 2] : ACT2_BOSS_ID;
+  const finalBossUnlocked = act3Unlocked && isWon(prereqFinalId);
   const finalBossDefeated = isWon(FINAL_BOSS_ID);
 
   return {
@@ -454,6 +678,11 @@ export function getProgressionStatus(
     act2Unlocked,
     act2Wins,
     act2Total: ACT2_STANDARD_IDS.length,
+    boss2Unlocked,
+    boss2Defeated,
+    act3Unlocked,
+    act3Wins,
+    act3Total: ACT3_BOSS_IDS.length,
     finalBossUnlocked,
     finalBossDefeated,
   };
@@ -478,19 +707,34 @@ export function isTrackUnlocked(
         };
   }
 
-  // Act 2
-  if (!status.act2Unlocked) {
-    return { unlocked: false, reason: 'Defeat Boss 1 (Obsidian Phantom) to unlock Act 2' };
+  if (def.act === 2) {
+    if (!status.act2Unlocked) {
+      return { unlocked: false, reason: 'Defeat Boss 1 (Obsidian Phantom) to unlock Act 2' };
+    }
+    if (!def.isBoss) return { unlocked: true };
+    return status.boss2Unlocked
+      ? { unlocked: true }
+      : {
+          unlocked: false,
+          reason: `Win all ${status.act2Total} Act 2 races (${status.act2Wins}/${status.act2Total})`,
+        };
   }
 
-  if (!def.isBoss) return { unlocked: true };
-
-  return status.finalBossUnlocked
-    ? { unlocked: true }
-    : {
-        unlocked: false,
-        reason: `Win all ${status.act2Total} Act 2 races (${status.act2Wins}/${status.act2Total})`,
-      };
+  // Act 3: 5-Boss Blacklist Overlord Gauntlet (sequential boss ladder)
+  if (!status.act3Unlocked) {
+    return { unlocked: false, reason: 'Defeat Boss 2 (Apex Sovereign) to unlock Act 3' };
+  }
+  const bossIdx = ACT3_BOSS_IDS.indexOf(def.id);
+  if (bossIdx <= 0) return { unlocked: true };
+  const prevBossId = ACT3_BOSS_IDS[bossIdx - 1];
+  const prevDef = RACE_TRACK_DEFINITIONS.find((t) => t.id === prevBossId);
+  if (completedRaces[prevBossId]?.bestPosition === 1) {
+    return { unlocked: true };
+  }
+  return {
+    unlocked: false,
+    reason: `Defeat ${prevDef?.bossProfile?.name ?? 'previous Boss'} (Boss #${bossIdx + 2}) first`,
+  };
 }
 
 const BUILT_TRACK_CACHE = new Map<string, BuiltRaceTrack>();
@@ -660,10 +904,12 @@ export function getBlacklistRankSummary(
   const status = getProgressionStatus(completedRaces);
   const totalEvents = RACE_TRACK_DEFINITIONS.length;
   const totalWins = Object.values(completedRaces).filter((r) => r.bestPosition === 1).length;
-  const rankNumber = Math.max(1, 12 - totalWins);
+  const rankNumber = Math.max(1, totalEvents + 1 - totalWins);
 
   const actLabel = status.finalBossDefeated
     ? 'CHAMPION'
+    : status.act3Unlocked
+    ? 'ACT III'
     : status.act2Unlocked
     ? 'ACT II'
     : 'ACT I';

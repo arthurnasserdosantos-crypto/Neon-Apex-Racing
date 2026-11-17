@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef } from 'react';
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Physics } from '@react-three/rapier';
 import { KeyboardControls, OrbitControls } from '@react-three/drei';
@@ -10,6 +10,7 @@ import { CarModel } from './CarModel';
 import { AIOpponentCars } from './AIOpponentCars';
 import { GameEnvironment } from './GameEnvironment';
 import { ScrapeSparks } from './ScrapeSparks';
+import { TURNTABLE_CONFIG, registerTurntableCameraReset } from '../utils/turntableConfig';
 
 function StudioEnvironment() {
   const { gl, scene } = useThree();
@@ -36,7 +37,7 @@ function CameraClipController({ isInteractiveWorld }: { isInteractiveWorld: bool
 
   useEffect(() => {
     camera.near = 0.5;
-    camera.far = isInteractiveWorld ? 650 : 120;
+    camera.far = isInteractiveWorld ? 950 : 120;
     camera.updateProjectionMatrix();
   }, [camera, isInteractiveWorld]);
 
@@ -45,12 +46,58 @@ function CameraClipController({ isInteractiveWorld }: { isInteractiveWorld: bool
 
 function ShowroomOrbitRig() {
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
+  const { camera } = useThree();
   const autoOrbitCam = useGameStore((state) => state.autoOrbitCam);
+  const orbitInputLocked = useGameStore((state) => state.orbitInputLocked);
+  const turntableResetId = useGameStore((state) => state.turntableResetId);
   const keysRef = useRef({ q: false, e: false });
+
+  const resetCameraToTurntable = useCallback(() => {
+    keysRef.current.q = false;
+    keysRef.current.e = false;
+
+    const [camX, camY, camZ] = TURNTABLE_CONFIG.defaultCameraPosition;
+    const [tgtX, tgtY, tgtZ] = TURNTABLE_CONFIG.defaultCameraTarget;
+
+    camera.position.set(camX, camY, camZ);
+    if (camera instanceof THREE.PerspectiveCamera) {
+      camera.fov = TURNTABLE_CONFIG.defaultCameraFov;
+      camera.updateProjectionMatrix();
+    }
+
+    const ctrl = controlsRef.current;
+    if (ctrl) {
+      const prevDamping = ctrl.enableDamping;
+      ctrl.enableDamping = false;
+      ctrl.target.set(tgtX, tgtY, tgtZ);
+      ctrl.update();
+      ctrl.saveState();
+      ctrl.enableDamping = prevDamping;
+    } else {
+      camera.lookAt(tgtX, tgtY, tgtZ);
+    }
+  }, [camera]);
+
+  useEffect(() => {
+    registerTurntableCameraReset(resetCameraToTurntable);
+    return () => registerTurntableCameraReset(null);
+  }, [resetCameraToTurntable]);
+
+  useLayoutEffect(() => {
+    resetCameraToTurntable();
+  }, [turntableResetId, resetCameraToTurntable]);
+
+  useEffect(() => {
+    if (orbitInputLocked) {
+      keysRef.current.q = false;
+      keysRef.current.e = false;
+    }
+  }, [orbitInputLocked]);
 
   useEffect(() => {
     const onKeyDown = (ev: KeyboardEvent) => {
       if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement) return;
+      if (useGameStore.getState().orbitInputLocked) return;
       if (ev.key === 'q' || ev.key === 'Q') keysRef.current.q = true;
       if (ev.key === 'e' || ev.key === 'E') keysRef.current.e = true;
     };
@@ -68,7 +115,7 @@ function ShowroomOrbitRig() {
 
   useFrame((_, delta) => {
     const ctrl = controlsRef.current;
-    if (!ctrl) return;
+    if (!ctrl || useGameStore.getState().orbitInputLocked) return;
     const dt = Math.min(delta, 0.05);
     const dir = (keysRef.current.e ? 1 : 0) - (keysRef.current.q ? 1 : 0);
     if (dir !== 0) {
@@ -80,14 +127,15 @@ function ShowroomOrbitRig() {
   return (
     <OrbitControls
       ref={controlsRef}
-      autoRotate={autoOrbitCam}
+      enabled={!orbitInputLocked}
+      autoRotate={autoOrbitCam && !orbitInputLocked}
       autoRotateSpeed={0.55}
       enableDamping
       dampingFactor={0.055}
       enablePan={false}
       minDistance={3.9}
       maxDistance={9.5}
-      target={[0.45, 0.55, 0]}
+      target={[...TURNTABLE_CONFIG.defaultCameraTarget]}
       maxPolarAngle={Math.PI / 2 - 0.08}
       minPolarAngle={Math.PI / 5}
     />
@@ -114,14 +162,19 @@ export function GameScene() {
     >
       <Canvas
         shadows={{ type: THREE.PCFSoftShadowMap }}
-        dpr={[1, 2]}
+        dpr={[1, 1.5]}
         gl={{
           antialias: true,
           powerPreference: 'high-performance',
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1.02,
         }}
-        camera={{ position: [4.4, 2.05, 5.6], fov: 46, near: 0.5, far: 120 }}
+        camera={{
+          position: [...TURNTABLE_CONFIG.defaultCameraPosition],
+          fov: TURNTABLE_CONFIG.defaultCameraFov,
+          near: 0.5,
+          far: 120,
+        }}
         onCreated={({ gl }) => {
           const canvas = gl.domElement;
           const handleLost = (e: Event) => {
@@ -133,7 +186,7 @@ export function GameScene() {
         <CameraClipController isInteractiveWorld={isInteractiveWorld} />
         <color attach="background" args={[isInteractiveWorld ? '#87CEEB' : '#0d0e10']} />
         {isInteractiveWorld ? (
-          <fog attach="fog" args={['#87CEEB', 115, 360]} />
+          <fog attach="fog" args={['#87CEEB', 175, 540]} />
         ) : (
           <fog attach="fog" args={['#0d0e10', 14, 42]} />
         )}
@@ -153,10 +206,10 @@ export function GameScene() {
           position={[18, 28, 16]}
           intensity={isInteractiveWorld ? 1.8 : 1.75}
           color={isInteractiveWorld ? '#fff7ed' : '#ffedd5'}
-          shadow-mapSize={[2048, 2048]}
+          shadow-mapSize={[1024, 1024]}
           shadow-bias={-0.0005}
           shadow-normalBias={0.02}
-          shadow-radius={3}
+          shadow-radius={2}
         >
           <orthographicCamera
             attach="shadow-camera"

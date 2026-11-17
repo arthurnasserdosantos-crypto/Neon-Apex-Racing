@@ -6,6 +6,7 @@ import {
   ACCEL_TIERS,
   ENGINE_TIERS,
   HANDLING_TIERS,
+  MAX_UPGRADE_STAGE,
   getCarPerformanceSpecs,
 } from '../utils/carTuning';
 
@@ -40,9 +41,18 @@ export function Garage() {
   const statCost = (level: number) => level * 500;
   const specs = getCarPerformanceSpecs(car, selectedCarId);
 
-  const nextEngineTier = car.speedLevel < 5 ? ENGINE_TIERS[car.speedLevel] : null;
-  const nextAccelTier = car.accelLevel < 5 ? ACCEL_TIERS[car.accelLevel] : null;
-  const nextHandlingTier = car.handlingLevel < 5 ? HANDLING_TIERS[car.handlingLevel] : null;
+  const nextEngineSpecs =
+    car.speedLevel < MAX_UPGRADE_STAGE
+      ? getCarPerformanceSpecs({ ...car, speedLevel: car.speedLevel + 1 }, selectedCarId)
+      : null;
+  const nextAccelSpecs =
+    car.accelLevel < MAX_UPGRADE_STAGE
+      ? getCarPerformanceSpecs({ ...car, accelLevel: car.accelLevel + 1 }, selectedCarId)
+      : null;
+  const nextHandlingSpecs =
+    car.handlingLevel < MAX_UPGRADE_STAGE
+      ? getCarPerformanceSpecs({ ...car, handlingLevel: car.handlingLevel + 1 }, selectedCarId)
+      : null;
 
   return (
     <main className="flex-1 grid grid-cols-12 pointer-events-none h-full min-h-0">
@@ -198,8 +208,8 @@ export function Garage() {
             name="Engine Stage"
             tierLabel={specs.engineTier.label}
             detail={
-              nextEngineTier
-                ? `Top Speed: ${specs.topSpeedKph} → ${nextEngineTier.topSpeedKph} KPH`
+              nextEngineSpecs
+                ? `Top Speed: ${specs.topSpeedKph} → ${nextEngineSpecs.topSpeedKph} KPH`
                 : `Max Top Speed: ${specs.topSpeedKph} KPH`
             }
             tierTags={ENGINE_TIERS.map((t) => `${t.topSpeedKph}`)}
@@ -214,8 +224,8 @@ export function Garage() {
             name="Transmission"
             tierLabel={specs.accelTier.label}
             detail={
-              nextAccelTier
-                ? `0–60 KPH: ${specs.zeroToSixtySec.toFixed(2)}s → ${nextAccelTier.zeroToSixtySec.toFixed(2)}s`
+              nextAccelSpecs
+                ? `0–60 KPH: ${specs.zeroToSixtySec.toFixed(2)}s → ${nextAccelSpecs.zeroToSixtySec.toFixed(2)}s`
                 : `Peak Launch: ${specs.zeroToSixtySec.toFixed(2)}s (0–60 KPH)`
             }
             tierTags={ACCEL_TIERS.map((t) => `${t.zeroToSixtySec.toFixed(2)}s`)}
@@ -230,8 +240,8 @@ export function Garage() {
             name="Suspension"
             tierLabel={specs.handlingTier.label}
             detail={
-              nextHandlingTier
-                ? `Lateral Grip: ${specs.gripScore}% → ${nextHandlingTier.gripScore}%`
+              nextHandlingSpecs
+                ? `Lateral Grip: ${specs.gripScore}% → ${nextHandlingSpecs.gripScore}%`
                 : `Peak Lateral Grip: ${specs.gripScore}%`
             }
             tierTags={HANDLING_TIERS.map((t) => `${t.gripScore}%`)}
@@ -267,7 +277,7 @@ function StatUpgrade({
   cost,
   onUpgrade,
 }: StatUpgradeProps) {
-  const canUpgrade = level < 5;
+  const canUpgrade = level < MAX_UPGRADE_STAGE;
   const cash = useGameStore((s) => s.cash);
   const affordable = cash >= cost;
 
@@ -283,19 +293,19 @@ function StatUpgrade({
           </span>
         </div>
         <span className="text-[11px] text-[#FF9900] font-mono font-bold tabular-nums">
-          STAGE {level}/5
+          STAGE {level}/{MAX_UPGRADE_STAGE}
         </span>
       </div>
       <div className="text-[11px] font-mono tabular-nums text-[#F4F4F4]/90 mb-3">{detail}</div>
 
-      <div className="grid grid-cols-5 gap-1 mb-1.5">
-        {[1, 2, 3, 4, 5].map((i) => (
+      <div className="grid grid-cols-7 gap-1 mb-1.5">
+        {Array.from({ length: MAX_UPGRADE_STAGE }, (_, idx) => idx + 1).map((i) => (
           <div key={i} className="flex flex-col gap-1">
             <div
               className={`h-1.5 ${i <= level ? 'bg-[#FF9900]' : 'bg-[#0D0E10] border border-[#3A3E45]'}`}
             />
             <span
-              className={`text-[9px] font-mono tabular-nums text-center ${
+              className={`text-[8px] font-mono tabular-nums text-center truncate ${
                 i === level ? 'text-[#FF9900] font-bold' : 'text-[#8E9299]'
               }`}
             >

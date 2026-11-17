@@ -3,6 +3,7 @@ import {
   ChevronRight,
   Compass,
   Flag,
+  Gamepad2,
   RotateCcw,
   Settings,
   ShoppingBag,
@@ -16,21 +17,23 @@ import {
 import { useGameStore } from '../store';
 import { getCarPerformanceSpecs } from '../utils/carTuning';
 import { engineAudio } from '../utils/engineAudio';
-import { getCarDefinition } from '../utils/carCatalog';
+import { CAR_ORDER, getCarDefinition } from '../utils/carCatalog';
 import {
   getBuiltRaceTrack,
   getProgressionStatus,
   getQuickRaceTrackId,
 } from '../utils/raceTracks';
+import { ResetTurntableShowcase } from '../utils/turntableConfig';
 
 interface NavOption {
-  id: 'CAREER' | 'GARAGE' | 'CAR_LOT' | 'QUICK_RACE' | 'FREE_ROAM' | 'OPTIONS';
+  id: 'CAREER' | 'GARAGE' | 'CAR_LOT' | 'QUICK_RACE' | 'FREE_ROAM' | 'OPTIONS' | 'GAME_STATION';
   label: string;
   tag: string;
   icon: React.ReactNode;
 }
 
 export function MainMenu() {
+  const setAppStationMode = useGameStore((s) => s.setAppStationMode);
   const setView = useGameStore((s) => s.setView);
   const openCarLot = useGameStore((s) => s.openCarLot);
   const startRace = useGameStore((s) => s.startRace);
@@ -42,6 +45,8 @@ export function MainMenu() {
   const setDriverAlias = useGameStore((s) => s.setDriverAlias);
   const autoOrbitCam = useGameStore((s) => s.autoOrbitCam);
   const setAutoOrbitCam = useGameStore((s) => s.setAutoOrbitCam);
+  const trafficCount = useGameStore((s) => s.trafficCount);
+  const setTrafficCount = useGameStore((s) => s.setTrafficCount);
   const resetProgression = useGameStore((s) => s.resetProgression);
 
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -53,14 +58,19 @@ export function MainMenu() {
   );
   const [confirmReset, setConfirmReset] = useState(false);
 
+  // OnEnter() lifecycle hook: ensure car & turntable camera cleanly reset to default hero framing
+  useEffect(() => {
+    ResetTurntableShowcase();
+  }, []);
+
   useEffect(() => {
     setAliasDraft(driverAlias);
   }, [driverAlias]);
 
   const carDef = getCarDefinition(selectedCarId);
   const specs = getCarPerformanceSpecs(car, selectedCarId);
-  const topSpeedPct = Math.min(100, Math.max(12, Math.round((specs.topSpeedKph / 260) * 100)));
-  const accelPct = Math.min(100, Math.max(12, Math.round((2.4 / specs.zeroToSixtySec) * 75)));
+  const topSpeedPct = Math.min(100, Math.max(12, Math.round((specs.topSpeedKph / 350) * 100)));
+  const accelPct = Math.min(100, Math.max(12, Math.round((2.4 / specs.zeroToSixtySec) * 65)));
   const gripPct = Math.min(100, Math.max(12, specs.gripScore));
 
   const prog = getProgressionStatus(completedRaces);
@@ -70,7 +80,11 @@ export function MainMenu() {
   const careerTag = prog.finalBossDefeated
     ? 'ALL CLEARED'
     : prog.finalBossUnlocked
-    ? 'FINAL BOSS READY'
+    ? 'FINAL BOSS #7 READY'
+    : prog.act3Unlocked
+    ? `ACT III · ${prog.act3Wins}/${prog.act3Total} BOSSES`
+    : prog.boss2Unlocked
+    ? 'BOSS 2 READY'
     : prog.act2Unlocked
     ? `ACT II · ${prog.act2Wins}/${prog.act2Total}`
     : prog.boss1Unlocked
@@ -94,7 +108,7 @@ export function MainMenu() {
       {
         id: 'CAR_LOT',
         label: 'CAR LOT / DEALERSHIP',
-        tag: `${ownedCarIds.length}/3 VEHICLES`,
+        tag: `${ownedCarIds.length}/${CAR_ORDER.length} VEHICLES`,
         icon: <ShoppingBag className="w-4 h-4" />,
       },
       {
@@ -115,6 +129,12 @@ export function MainMenu() {
         tag: optionsOpen ? 'OPEN' : 'SETTINGS',
         icon: <Settings className="w-4 h-4" />,
       },
+      {
+        id: 'GAME_STATION',
+        label: 'GAME STATION',
+        tag: 'TITLE SELECTOR',
+        icon: <Gamepad2 className="w-4 h-4" />,
+      },
     ],
     [careerTag, car.speedLevel, car.accelLevel, car.handlingLevel, ownedCarIds.length, quickTrack.title, optionsOpen],
   );
@@ -134,9 +154,11 @@ export function MainMenu() {
         setView('FREE_ROAM');
       } else if (id === 'OPTIONS') {
         setOptionsOpen((prev) => !prev);
+      } else if (id === 'GAME_STATION') {
+        setAppStationMode('STATION');
       }
     },
-    [setView, openCarLot, startRace, quickTrackId],
+    [setView, openCarLot, startRace, quickTrackId, setAppStationMode],
   );
 
   // Keyboard navigation matching bottom ticker: W/S or ArrowUp/Down, Enter, Esc
@@ -399,6 +421,58 @@ export function MainMenu() {
                     >
                       {autoOrbitCam ? 'Auto Pan ON' : 'Manual Only'}
                     </button>
+                  </div>
+
+                  {/* Free Roam Traffic Density Setting */}
+                  <div className="p-3 bg-[#141822]/80 border border-white/5 rounded-xs space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#8E96A4]">
+                        Free Roam Traffic
+                      </span>
+                      <span className="text-xs font-mono font-bold tabular-nums text-[#FF8C00]">
+                        {trafficCount === 0 ? 'OFF (0)' : `${trafficCount} CARS`}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {[
+                        { label: 'Off', count: 0 },
+                        { label: 'Low', count: 12 },
+                        { label: 'Med', count: 24 },
+                        { label: 'High', count: 40 },
+                        { label: 'Max', count: 60 },
+                      ].map((preset) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => {
+                            engineAudio.playUiClick();
+                            setTrafficCount(preset.count);
+                          }}
+                          className={`py-1 border text-[10px] font-mono font-bold uppercase transition-colors cursor-pointer ${
+                            trafficCount === preset.count
+                              ? 'bg-gradient-to-r from-[#FF8C00] to-[#FF5500] border-[#FFAA33] text-[#0D0F14]'
+                              : 'bg-[#0D0F14] border-[#3A3E45] text-[#8E96A4] hover:text-white'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min={0}
+                        max={60}
+                        step={2}
+                        value={trafficCount}
+                        onChange={(e) => setTrafficCount(Number(e.target.value))}
+                        aria-label="Free Roam Traffic Count"
+                        className="flex-1 accent-[#FF8C00] cursor-pointer"
+                      />
+                      <span className="text-xs font-mono tabular-nums text-[#FFFFFF] w-10 text-right">
+                        {trafficCount}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Reset Career Save */}

@@ -18,7 +18,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useGameStore } from '../store';
-import { CAR_CATALOG, getCarDefinition } from '../utils/carCatalog';
+import { CAR_CATALOG, CAR_ORDER, getCarDefinition } from '../utils/carCatalog';
 import { engineAudio } from '../utils/engineAudio';
 import {
   ACT1_BOSS_ID,
@@ -26,7 +26,7 @@ import {
   getProgressionStatus,
   RACE_TRACK_DEFINITIONS,
 } from '../utils/raceTracks';
-import { getCarPerformanceSpecs } from '../utils/carTuning';
+import { getCarPerformanceSpecs, MAX_UPGRADE_STAGE } from '../utils/carTuning';
 
 const CHEAT_SEQUENCE = '2445746';
 
@@ -89,6 +89,7 @@ export function DevMenu() {
   const unlockAllCars = useGameStore((s) => s.unlockAllCars);
   const completedRaces = useGameStore((s) => s.completedRaces);
   const unlockAct2Dev = useGameStore((s) => s.unlockAct2Dev);
+  const unlockAct3Dev = useGameStore((s) => s.unlockAct3Dev);
   const completeAllRacesDev = useGameStore((s) => s.completeAllRacesDev);
   const toggleRaceCompletedDev = useGameStore((s) => s.toggleRaceCompletedDev);
   const resetProgression = useGameStore((s) => s.resetProgression);
@@ -316,8 +317,10 @@ export function DevMenu() {
                       <label className="block text-[10px] font-mono uppercase tracking-[0.2em] text-[#8E96A4] mb-2">
                         Target Vehicle
                       </label>
-                      <div className="grid grid-cols-3 gap-2.5">
-                        {Object.values(CAR_CATALOG).map((def) => {
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                        {CAR_ORDER.map((id) => {
+                          const def = CAR_CATALOG[id];
+                          if (!def) return null;
                           const isTarget = editingCarId === def.id;
                           const isEquipped = selectedCarId === def.id;
                           const isOwned = ownedCarIds.includes(def.id);
@@ -346,7 +349,7 @@ export function DevMenu() {
                               <div className="font-[family-name:var(--font-racing)] italic font-bold text-xs uppercase truncate">
                                 {def.name}
                               </div>
-                              <div className="text-[9px] font-mono text-[#8E96A4] uppercase">
+                              <div className="text-[9px] font-mono text-[#8E96A4] uppercase truncate">
                                 {def.class}
                               </div>
                             </button>
@@ -372,12 +375,12 @@ export function DevMenu() {
                           type="button"
                           onClick={() => {
                             unlockAllCars();
-                            showToast('ALL 3 VEHICLES UNLOCKED INTO GARAGE');
+                            showToast(`ALL ${CAR_ORDER.length} VEHICLES UNLOCKED INTO GARAGE`);
                           }}
                           className="px-3 py-1.5 bg-[#18202E] hover:bg-[#222C3E] border border-white/20 text-white text-xs font-[family-name:var(--font-racing)] italic font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
                         >
                           <Unlock className="w-3.5 h-3.5 text-[#00E5FF]" />
-                          <span>Unlock All 3 Vehicles</span>
+                          <span>Unlock All {CAR_ORDER.length} Vehicles</span>
                         </button>
                       </div>
                     </div>
@@ -413,14 +416,14 @@ export function DevMenu() {
                         <div className="flex items-center justify-between text-xs font-mono">
                           <span className="text-[#8E96A4] font-bold uppercase">Speed Upgrade Level</span>
                           <span className="text-white font-bold">
-                            STAGE {activeCarConfig.speedLevel} / 5
+                            STAGE {activeCarConfig.speedLevel} / {MAX_UPGRADE_STAGE}
                           </span>
                         </div>
                         <div className="flex items-center gap-3">
                           <input
                             type="range"
                             min={1}
-                            max={5}
+                            max={MAX_UPGRADE_STAGE}
                             step={1}
                             value={activeCarConfig.speedLevel}
                             onChange={(e) => {
@@ -430,7 +433,7 @@ export function DevMenu() {
                             className="flex-1 accent-[#00E5FF] cursor-pointer"
                           />
                           <div className="flex gap-1">
-                            {[1, 2, 3, 4, 5].map((lvl) => (
+                            {Array.from({ length: MAX_UPGRADE_STAGE }, (_, i) => i + 1).map((lvl) => (
                               <button
                                 key={lvl}
                                 type="button"
@@ -455,14 +458,14 @@ export function DevMenu() {
                             Acceleration Upgrade Level
                           </span>
                           <span className="text-[#FF8C00] font-bold">
-                            STAGE {activeCarConfig.accelLevel} / 5
+                            STAGE {activeCarConfig.accelLevel} / {MAX_UPGRADE_STAGE}
                           </span>
                         </div>
                         <div className="flex items-center gap-3">
                           <input
                             type="range"
                             min={1}
-                            max={5}
+                            max={MAX_UPGRADE_STAGE}
                             step={1}
                             value={activeCarConfig.accelLevel}
                             onChange={(e) => {
@@ -472,7 +475,7 @@ export function DevMenu() {
                             className="flex-1 accent-[#FF8C00] cursor-pointer"
                           />
                           <div className="flex gap-1">
-                            {[1, 2, 3, 4, 5].map((lvl) => (
+                            {Array.from({ length: MAX_UPGRADE_STAGE }, (_, i) => i + 1).map((lvl) => (
                               <button
                                 key={lvl}
                                 type="button"
@@ -497,14 +500,14 @@ export function DevMenu() {
                             Handling Upgrade Level
                           </span>
                           <span className="text-[#00FF66] font-bold">
-                            STAGE {activeCarConfig.handlingLevel} / 5
+                            STAGE {activeCarConfig.handlingLevel} / {MAX_UPGRADE_STAGE}
                           </span>
                         </div>
                         <div className="flex items-center gap-3">
                           <input
                             type="range"
                             min={1}
-                            max={5}
+                            max={MAX_UPGRADE_STAGE}
                             step={1}
                             value={activeCarConfig.handlingLevel}
                             onChange={(e) => {
@@ -514,7 +517,7 @@ export function DevMenu() {
                             className="flex-1 accent-[#00FF66] cursor-pointer"
                           />
                           <div className="flex gap-1">
-                            {[1, 2, 3, 4, 5].map((lvl) => (
+                            {Array.from({ length: MAX_UPGRADE_STAGE }, (_, i) => i + 1).map((lvl) => (
                               <button
                                 key={lvl}
                                 type="button"
@@ -539,11 +542,11 @@ export function DevMenu() {
                         type="button"
                         onClick={() => {
                           maxOutCar(editingCarId);
-                          showToast(`MAXED OUT ${editingCarDef.name.toUpperCase()} TO STAGE 5`);
+                          showToast(`MAXED OUT ${editingCarDef.name.toUpperCase()} TO STAGE ${MAX_UPGRADE_STAGE}`);
                         }}
                         className="px-4 py-2 bg-gradient-to-r from-[#00E5FF] to-[#0099FF] text-[#0D0F14] font-[family-name:var(--font-racing)] italic font-black uppercase text-xs tracking-wider cursor-pointer shadow-md"
                       >
-                        ⚡ Max Out Car (Stage 5 God Tier)
+                        ⚡ Max Out Car (Stage {MAX_UPGRADE_STAGE} God Tier)
                       </button>
 
                       <button
@@ -668,7 +671,7 @@ export function DevMenu() {
                           Current Blacklist Progress
                         </span>
                         <strong className="text-white text-sm">
-                          {Object.keys(completedRaces).length} / 11 RACES CONQUERED
+                          {Object.keys(completedRaces).length} / {RACE_TRACK_DEFINITIONS.length} RACES CONQUERED
                         </strong>
                       </div>
                       <div className="text-right">
@@ -678,6 +681,8 @@ export function DevMenu() {
                         <strong className="text-[#00FF66] text-sm">
                           {prog.finalBossDefeated
                             ? 'GRAND CHAMPION'
+                            : prog.act3Unlocked
+                            ? 'ACT III OVERLORDS'
                             : prog.act2Unlocked
                             ? 'ACT II CONQUEROR'
                             : 'ACT I SYNDICATE'}
@@ -690,7 +695,7 @@ export function DevMenu() {
                       <span className="block text-[10px] font-mono uppercase tracking-[0.2em] text-[#8E96A4]">
                         Master Progression Jump
                       </span>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                         <button
                           type="button"
                           onClick={() => {
@@ -704,7 +709,24 @@ export function DevMenu() {
                             <ChevronRight className="w-4 h-4 text-[#00FF66] group-hover:translate-x-1 transition-transform" />
                           </div>
                           <p className="text-[10px] font-mono text-[#8E96A4] mt-0.5">
-                            Marks all 4 Act 1 races &amp; Razor as beaten
+                            Beats Act 1 &amp; Boss 1 Razor
+                          </p>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            unlockAct3Dev();
+                            showToast('ACT III UNLOCKED // BOSS 2 SOVEREIGN DEFEATED');
+                          }}
+                          className="p-3 bg-[#18202E] hover:bg-[#242F42] border border-[#FF8C00]/50 text-left rounded-xs cursor-pointer group"
+                        >
+                          <div className="flex items-center justify-between text-xs font-[family-name:var(--font-racing)] italic font-bold text-white uppercase">
+                            <span>Unlock Act III</span>
+                            <ChevronRight className="w-4 h-4 text-[#FF8C00] group-hover:translate-x-1 transition-transform" />
+                          </div>
+                          <p className="text-[10px] font-mono text-[#8E96A4] mt-0.5">
+                            Opens 5-Boss Gauntlet (Bosses 3–7)
                           </p>
                         </button>
 
@@ -712,16 +734,18 @@ export function DevMenu() {
                           type="button"
                           onClick={() => {
                             completeAllRacesDev();
-                            showToast('100% BLACKLIST CONQUERED // ALL 11 RACES WON');
+                            showToast(
+                              `100% BLACKLIST CONQUERED // ALL ${RACE_TRACK_DEFINITIONS.length} RACES WON`,
+                            );
                           }}
                           className="p-3 bg-gradient-to-r from-[#00FF66]/20 to-[#00FF66]/5 hover:bg-[#00FF66]/30 border border-[#00FF66] text-left rounded-xs cursor-pointer group"
                         >
                           <div className="flex items-center justify-between text-xs font-[family-name:var(--font-racing)] italic font-black text-white uppercase">
-                            <span>100% Blacklist Clear</span>
+                            <span>100% Clear</span>
                             <Trophy className="w-4 h-4 text-[#00FF66]" />
                           </div>
                           <p className="text-[10px] font-mono text-[#8E96A4] mt-0.5">
-                            Sets 1st place on all 11 tracks including Apex Sovereign
+                            Beats all {RACE_TRACK_DEFINITIONS.length} events &amp; Omega Prime
                           </p>
                         </button>
                       </div>

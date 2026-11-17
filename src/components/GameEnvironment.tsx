@@ -3,16 +3,8 @@ import { useThree } from '@react-three/fiber';
 import { RigidBody, CuboidCollider } from '@react-three/rapier';
 import * as THREE from 'three';
 import { useGameStore } from '../store';
-import {
-  FREE_ROAM_BOUNDS,
-  FREE_ROAM_BUILDINGS,
-  FREE_ROAM_BEACONS,
-  STREETLIGHT_POLES,
-  FREE_ROAM_PYLONS,
-  CityBuilding,
-  WorldBeacon,
-} from '../utils/freeRoamWorld';
 import { BuiltRaceTrack, getBuiltRaceTrack } from '../utils/raceTracks';
+import { FreeRoamCity } from './FreeRoamCity';
 
 function createAsphaltTexture(anisotropy: number): THREE.CanvasTexture {
   const size = 256;
@@ -43,7 +35,7 @@ function createAsphaltTexture(anisotropy: number): THREE.CanvasTexture {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(90, 90);
+  tex.repeat.set(120, 120);
   tex.anisotropy = anisotropy;
   return tex;
 }
@@ -134,6 +126,105 @@ function buildTrackRibbonGeometries(track: BuiltRaceTrack) {
     for (let k = 0; k < 6; k++) curbNormals.push(0, 1, 0);
   }
 
+  // Smooth continuous rounded tubular/arched track walls along left and right edges
+  const wallOffset = roadWidth / 2 + 1.05;
+  const wallPositions: number[] = [];
+  const wallNormals: number[] = [];
+  const wallColors: number[] = [];
+
+  // Cross-section profile points (u = lateral across wall width, y = height, nu/ny = smooth outward normal)
+  // Forms a sleek rounded stadium-arch barrier (width ~0.84m, height ~1.40m, smooth curved sides & dome top)
+  const profile: Array<{ u: number; y: number; nu: number; ny: number }> = [];
+  const rx = 0.42;
+  const ry = 0.72;
+  const cy = 0.68;
+  const arcSteps = 10;
+  // Inner ground skirt anchor
+  profile.push({ u: -0.34, y: 0.0, nu: -0.96, ny: -0.28 });
+  for (let p = 0; p <= arcSteps; p++) {
+    const theta = Math.PI + 0.34 - (p / arcSteps) * (Math.PI + 0.68);
+    const cosT = Math.cos(theta);
+    const sinT = Math.sin(theta);
+    const px = rx * cosT;
+    const py = Math.max(0.02, cy + ry * sinT);
+    const nLen = Math.hypot(cosT / rx, sinT / ry) || 1;
+    profile.push({
+      u: px,
+      y: py,
+      nu: (cosT / rx) / nLen,
+      ny: (sinT / ry) / nLen,
+    });
+  }
+  // Outer ground skirt anchor
+  profile.push({ u: 0.34, y: 0.0, nu: 0.96, ny: -0.28 });
+
+  const pushWallQuadSide = (sideSign: -1 | 1) => {
+    for (let i = 0; i < n; i++) {
+      const a = samples[i];
+      const b = samples[(i + 1) % n];
+
+      const isRed = Math.floor(i / 3) % 2 === 0;
+      const cr = isRed ? 0.86 : 0.95;
+      const cg = isRed ? 0.15 : 0.96;
+      const cb = isRed ? 0.15 : 0.97;
+
+      const aCenterX = a.pos.x + a.right.x * (sideSign * wallOffset);
+      const aCenterZ = a.pos.z + a.right.z * (sideSign * wallOffset);
+      const bCenterX = b.pos.x + b.right.x * (sideSign * wallOffset);
+      const bCenterZ = b.pos.z + b.right.z * (sideSign * wallOffset);
+
+      for (let k = 0; k < profile.length - 1; k++) {
+        const p0 = profile[k];
+        const p1 = profile[k + 1];
+
+        const a0x = aCenterX + a.right.x * p0.u;
+        const a0y = p0.y;
+        const a0z = aCenterZ + a.right.z * p0.u;
+
+        const a1x = aCenterX + a.right.x * p1.u;
+        const a1y = p1.y;
+        const a1z = aCenterZ + a.right.z * p1.u;
+
+        const b0x = bCenterX + b.right.x * p0.u;
+        const b0y = p0.y;
+        const b0z = bCenterZ + b.right.z * p0.u;
+
+        const b1x = bCenterX + b.right.x * p1.u;
+        const b1y = p1.y;
+        const b1z = bCenterZ + b.right.z * p1.u;
+
+        const na0x = a.right.x * p0.nu;
+        const na0y = p0.ny;
+        const na0z = a.right.z * p0.nu;
+
+        const na1x = a.right.x * p1.nu;
+        const na1y = p1.ny;
+        const na1z = a.right.z * p1.nu;
+
+        const nb0x = b.right.x * p0.nu;
+        const nb0y = p0.ny;
+        const nb0z = b.right.z * p0.nu;
+
+        const nb1x = b.right.x * p1.nu;
+        const nb1y = p1.ny;
+        const nb1z = b.right.z * p1.nu;
+
+        // Triangle 1: (a0, a1, b0)
+        wallPositions.push(a0x, a0y, a0z, a1x, a1y, a1z, b0x, b0y, b0z);
+        wallNormals.push(na0x, na0y, na0z, na1x, na1y, na1z, nb0x, nb0y, nb0z);
+        pushColorTri(wallColors, cr, cg, cb);
+
+        // Triangle 2: (a1, b1, b0)
+        wallPositions.push(a1x, a1y, a1z, b1x, b1y, b1z, b0x, b0y, b0z);
+        wallNormals.push(na1x, na1y, na1z, nb1x, nb1y, nb1z, nb0x, nb0y, nb0z);
+        pushColorTri(wallColors, cr, cg, cb);
+      }
+    }
+  };
+
+  pushWallQuadSide(-1);
+  pushWallQuadSide(1);
+
   const roadGeo = new THREE.BufferGeometry();
   roadGeo.setAttribute('position', new THREE.Float32BufferAttribute(roadPositions, 3));
   roadGeo.setAttribute('normal', new THREE.Float32BufferAttribute(roadNormals, 3));
@@ -144,7 +235,12 @@ function buildTrackRibbonGeometries(track: BuiltRaceTrack) {
   curbGeo.setAttribute('normal', new THREE.Float32BufferAttribute(curbNormals, 3));
   curbGeo.setAttribute('color', new THREE.Float32BufferAttribute(curbColors, 3));
 
-  return { roadGeo, curbGeo };
+  const wallGeo = new THREE.BufferGeometry();
+  wallGeo.setAttribute('position', new THREE.Float32BufferAttribute(wallPositions, 3));
+  wallGeo.setAttribute('normal', new THREE.Float32BufferAttribute(wallNormals, 3));
+  wallGeo.setAttribute('color', new THREE.Float32BufferAttribute(wallColors, 3));
+
+  return { roadGeo, curbGeo, wallGeo };
 }
 
 function CustomRaceTrack({
@@ -154,18 +250,19 @@ function CustomRaceTrack({
   track: BuiltRaceTrack;
   asphaltTexture: THREE.CanvasTexture;
 }) {
-  const { roadGeo, curbGeo } = useMemo(() => buildTrackRibbonGeometries(track), [track]);
+  const { roadGeo, curbGeo, wallGeo } = useMemo(() => buildTrackRibbonGeometries(track), [track]);
 
   useEffect(() => {
     return () => {
       roadGeo.dispose();
       curbGeo.dispose();
+      wallGeo.dispose();
     };
-  }, [roadGeo, curbGeo]);
+  }, [roadGeo, curbGeo, wallGeo]);
 
-  // 80 barrier segments spaced evenly around loop on both left and right track edges
+  // 120 smooth collision segments spaced evenly around loop on both left and right track edges
   const barrierSegments = useMemo(() => {
-    const segCount = 80;
+    const segCount = 120;
     const step = track.samples.length / segCount;
     const wallOffset = track.roadWidth / 2 + 1.05;
     const segLen = (track.totalLength / segCount) * 1.04;
@@ -175,8 +272,6 @@ function CustomRaceTrack({
       z: number;
       yaw: number;
       len: number;
-      isLeft: boolean;
-      isRed: boolean;
     }[] = [];
 
     for (let i = 0; i < segCount; i++) {
@@ -202,16 +297,12 @@ function CustomRaceTrack({
         z: midZ - nrz * wallOffset,
         yaw,
         len: segLen,
-        isLeft: true,
-        isRed: i % 2 === 0,
       });
       list.push({
         x: midX + nrx * wallOffset,
         z: midZ + nrz * wallOffset,
         yaw,
         len: segLen,
-        isLeft: false,
-        isRed: i % 2 === 0,
       });
     }
     return list;
@@ -304,20 +395,21 @@ function CustomRaceTrack({
         </mesh>
       ))}
 
-      {/* Solid physical outer walls along circuit edges */}
-      {barrierSegments.map((b, i) => (
-        <RigidBody
-          key={`wall-${track.id}-${i}`}
-          type="fixed"
-          position={[b.x, 0.85, b.z]}
-          rotation={[0, b.yaw, 0]}
-        >
-          <mesh castShadow receiveShadow>
-            <boxGeometry args={[0.75, 1.7, b.len]} />
-            <meshStandardMaterial color={b.isRed ? '#dc2626' : '#f4f4f5'} roughness={0.6} />
-          </mesh>
-        </RigidBody>
-      ))}
+      {/* Smooth continuous rounded tubular barriers along circuit edges (1 draw call + smooth physics colliders) */}
+      <mesh geometry={wallGeo} castShadow receiveShadow>
+        <meshStandardMaterial vertexColors roughness={0.42} metalness={0.18} />
+      </mesh>
+      <RigidBody type="fixed" colliders={false} friction={0}>
+        {barrierSegments.map((b, i) => (
+          <CuboidCollider
+            key={`wall-col-${track.id}-${i}`}
+            args={[0.4, 0.72, b.len * 0.5]}
+            position={[b.x, 0.72, b.z]}
+            rotation={[0, b.yaw, 0]}
+            friction={0}
+          />
+        ))}
+      </RigidBody>
 
       {/* Start / Finish Checkered Strip & Overhead Gantry */}
       <group
@@ -366,13 +458,13 @@ export function GameEnvironment() {
     <group>
       {/* Solid Ground Collider (friction 0 so CarModel controls rolling/grip cleanly) */}
       <RigidBody type="fixed" friction={0} restitution={0}>
-        <CuboidCollider args={[600, 0.5, 600]} position={[0, -0.5, 0]} friction={0} />
+        <CuboidCollider args={[700, 0.5, 700]} position={[0, -0.5, 0]} friction={0} />
         <mesh
           receiveShadow
           position={[0, isShowroom ? -0.045 : 0, 0]}
           rotation={[-Math.PI / 2, 0, 0]}
         >
-          <planeGeometry args={[isShowroom ? 160 : 1200, isShowroom ? 160 : 1200]} />
+          <planeGeometry args={[isShowroom ? 160 : 1400, isShowroom ? 160 : 1400]} />
           <meshStandardMaterial
             map={isShowroom ? null : asphaltTexture}
             color={isShowroom ? '#12151c' : view === 'RACE' ? '#243028' : '#232830'}
@@ -388,381 +480,9 @@ export function GameEnvironment() {
       {/* RACE MODE: Custom Procedural Closed Circuit */}
       {view === 'RACE' && <CustomRaceTrack track={activeTrack} asphaltTexture={asphaltTexture} />}
 
-      {/* FREE ROAM MODE: 2x Expanded Urban Street Grid with Buildings & Interactive Beacons */}
-      {view === 'FREE_ROAM' && (
-        <group>
-          {/* --- INTERCONNECTED ASPHALT ROAD NETWORK --- */}
-          {/* Grand North-South Boulevard (x = 0, width 16m, length 480m) */}
-          <mesh position={[0, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-            <planeGeometry args={[16, 480]} />
-            <meshStandardMaterial color="#1a1e24" roughness={0.84} polygonOffset polygonOffsetFactor={-1} />
-          </mesh>
+      {/* FREE ROAM MODE: 2x Expanded 1120x1120 Urban & Suburban City */}
+      {view === 'FREE_ROAM' && <FreeRoamCity />}
 
-          {/* Central East-West Cross Avenue (z = 0, width 16m, length 480m) */}
-          <mesh position={[0, 0.013, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-            <planeGeometry args={[480, 16]} />
-            <meshStandardMaterial color="#1a1e24" roughness={0.84} polygonOffset polygonOffsetFactor={-1} />
-          </mesh>
-
-          {/* District Avenues: North & South (z = ±120, width 14m, length 480m) */}
-          {[-120, 120].map((z, idx) => (
-            <mesh key={`h-ave-${idx}`} position={[0, 0.012, z]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-              <planeGeometry args={[480, 14]} />
-              <meshStandardMaterial color="#1c2026" roughness={0.85} polygonOffset polygonOffsetFactor={-1} />
-            </mesh>
-          ))}
-
-          {/* District Boulevards: West & East (x = ±120, width 14m, length 480m) */}
-          {[-120, 120].map((x, idx) => (
-            <mesh key={`v-ave-${idx}`} position={[x, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-              <planeGeometry args={[14, 480]} />
-              <meshStandardMaterial color="#1c2026" roughness={0.85} polygonOffset polygonOffsetFactor={-1} />
-            </mesh>
-          ))}
-
-          {/* Perimeter Highway Loop (x = ±240, z = ±240, width 16m) */}
-          {[-240, 240].map((z, idx) => (
-            <mesh key={`perim-h-${idx}`} position={[0, 0.012, z]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-              <planeGeometry args={[500, 16]} />
-              <meshStandardMaterial color="#171a20" roughness={0.82} polygonOffset polygonOffsetFactor={-1} />
-            </mesh>
-          ))}
-          {[-240, 240].map((x, idx) => (
-            <mesh key={`perim-v-${idx}`} position={[x, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-              <planeGeometry args={[16, 500]} />
-              <meshStandardMaterial color="#171a20" roughness={0.82} polygonOffset polygonOffsetFactor={-1} />
-            </mesh>
-          ))}
-
-          {/* Yellow Dashed Centerlines along Grand North-South Boulevard */}
-          {Array.from({ length: 48 }).map((_, i) => (
-            <mesh
-              key={`dash-ns-${i}`}
-              position={[0, 0.02, -235 + i * 10]}
-              rotation={[-Math.PI / 2, 0, 0]}
-            >
-              <planeGeometry args={[0.32, 5.5]} />
-              <meshStandardMaterial color="#facc15" roughness={0.6} polygonOffset polygonOffsetFactor={-2} />
-            </mesh>
-          ))}
-
-          {/* Yellow Dashed Centerlines along Central East-West Cross Avenue */}
-          {Array.from({ length: 48 }).map((_, i) => (
-            <mesh
-              key={`dash-ew-${i}`}
-              position={[-235 + i * 10, 0.02, 0]}
-              rotation={[-Math.PI / 2, 0, Math.PI / 2]}
-            >
-              <planeGeometry args={[0.32, 5.5]} />
-              <meshStandardMaterial color="#facc15" roughness={0.6} polygonOffset polygonOffsetFactor={-2} />
-            </mesh>
-          ))}
-
-          {/* Pedestrian Zebra Crosswalks at Major Intersections */}
-          {[-120, 0, 120].map((crossZ) =>
-            [-120, 0, 120].map((crossX) => (
-              <group key={`crosswalk-${crossX}-${crossZ}`} position={[crossX, 0.022, crossZ]}>
-                {/* 4 striped pedestrian zones around intersection */}
-                {[-10, 10].map((offsetZ, zi) => (
-                  <mesh key={`cw-z-${zi}`} position={[0, 0, offsetZ]} rotation={[-Math.PI / 2, 0, 0]}>
-                    <planeGeometry args={[12, 2.4]} />
-                    <meshStandardMaterial color="#f4f4f5" roughness={0.5} polygonOffset polygonOffsetFactor={-3} />
-                  </mesh>
-                ))}
-                {[-10, 10].map((offsetX, xi) => (
-                  <mesh key={`cw-x-${xi}`} position={[offsetX, 0, 0]} rotation={[-Math.PI / 2, 0, Math.PI / 2]}>
-                    <planeGeometry args={[12, 2.4]} />
-                    <meshStandardMaterial color="#f4f4f5" roughness={0.5} polygonOffset polygonOffsetFactor={-3} />
-                  </mesh>
-                ))}
-              </group>
-            )),
-          )}
-
-          {/* --- SLALOM DRIFT PYLONS IN SPAWN AREA --- */}
-          {FREE_ROAM_PYLONS.map((p, i) => (
-            <RigidBody key={`pylon-${i}`} type="dynamic" mass={2} position={[p.x, 0.5, p.z]}>
-              <mesh castShadow receiveShadow>
-                <cylinderGeometry args={[0.25, 0.45, 1.0, 12]} />
-                <meshStandardMaterial color="#f97316" roughness={0.4} />
-              </mesh>
-            </RigidBody>
-          ))}
-
-          {/* --- 3D CITY BUILDINGS WITH RIGIDBODIES --- */}
-          {FREE_ROAM_BUILDINGS.map((b) => (
-            <RigidBody key={b.id} type="fixed" position={[b.x, b.size[1] / 2, b.z]}>
-              <group>
-                {/* Main Building Monolith */}
-                <mesh castShadow receiveShadow>
-                  <boxGeometry args={b.size} />
-                  <meshStandardMaterial color={b.color} roughness={0.7} metalness={0.25} />
-                </mesh>
-
-                {/* Building Base Trim / Foundation */}
-                <mesh position={[0, -b.size[1] / 2 + 0.6, 0]}>
-                  <boxGeometry args={[b.size[0] + 0.4, 1.2, b.size[2] + 0.4]} />
-                  <meshStandardMaterial color="#111317" roughness={0.8} />
-                </mesh>
-
-                {/* Skyscraper Windows & Vertical Illuminated Fins */}
-                {b.type === 'skyscraper' && (
-                  <group>
-                    {/* Glowing Accent Corner Pillars */}
-                    {[-1, 1].map((sx, xi) =>
-                      [-1, 1].map((sz, zi) => (
-                        <mesh
-                          key={`col-${xi}-${zi}`}
-                          position={[(b.size[0] / 2) * sx, 0, (b.size[2] / 2) * sz]}
-                        >
-                          <boxGeometry args={[0.4, b.size[1] * 0.98, 0.4]} />
-                          <meshStandardMaterial color={b.accentColor} emissive={b.accentColor} emissiveIntensity={0.6} />
-                        </mesh>
-                      )),
-                    )}
-                    {/* Roof Communications Tower & Warning Beacon */}
-                    <mesh position={[0, b.size[1] / 2 + 4, 0]}>
-                      <cylinderGeometry args={[0.08, 0.25, 8, 8]} />
-                      <meshStandardMaterial color="#a1a1aa" metalness={0.8} />
-                    </mesh>
-                    <mesh position={[0, b.size[1] / 2 + 8, 0]}>
-                      <sphereGeometry args={[0.3, 12, 12]} />
-                      <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={2.5} />
-                    </mesh>
-                  </group>
-                )}
-
-                {/* Industrial Warehouse Loading Bays & Corrugated Roof */}
-                {b.type === 'warehouse' && (
-                  <group>
-                    {/* Industrial Amber Hazard Stripes above Loading Bay */}
-                    <mesh position={[0, -b.size[1] / 2 + 2.5, b.size[2] / 2 + 0.05]}>
-                      <boxGeometry args={[b.size[0] * 0.7, 3.2, 0.1]} />
-                      <meshStandardMaterial color="#1e222a" roughness={0.6} />
-                    </mesh>
-                    <mesh position={[0, -b.size[1] / 2 + 4.2, b.size[2] / 2 + 0.12]}>
-                      <boxGeometry args={[b.size[0] * 0.75, 0.4, 0.12]} />
-                      <meshStandardMaterial color="#f59e0b" emissive="#b45309" emissiveIntensity={0.6} />
-                    </mesh>
-                  </group>
-                )}
-
-                {/* CENTRAL GARAGE LANDMARK BUILDING BRANDING */}
-                {b.type === 'garage_hq' && (
-                  <group>
-                    {/* Illuminated Orange Garage Signboard */}
-                    <mesh position={[-b.size[0] / 2 - 0.1, b.size[1] / 2 - 1.2, 0]} rotation={[0, -Math.PI / 2, 0]}>
-                      <boxGeometry args={[14, 1.8, 0.2]} />
-                      <meshStandardMaterial color="#0d0e10" />
-                    </mesh>
-                    <mesh position={[-b.size[0] / 2 - 0.22, b.size[1] / 2 - 1.2, 0]} rotation={[0, -Math.PI / 2, 0]}>
-                      <boxGeometry args={[13.4, 1.2, 0.05]} />
-                      <meshStandardMaterial color="#FF9900" emissive="#FF9900" emissiveIntensity={2.2} />
-                    </mesh>
-                    {/* Workshop Bay Rollup Doors */}
-                    {[-4.5, 4.5].map((zPos, di) => (
-                      <mesh key={`door-${di}`} position={[-b.size[0] / 2 - 0.08, -b.size[1] / 2 + 2.2, zPos]} rotation={[0, -Math.PI / 2, 0]}>
-                        <boxGeometry args={[5.5, 4.2, 0.12]} />
-                        <meshStandardMaterial color="#27272a" metalness={0.6} roughness={0.3} />
-                      </mesh>
-                    ))}
-                  </group>
-                )}
-
-                {/* DEALERSHIP / CAR LOT LANDMARK BUILDING BRANDING */}
-                {b.type === 'dealership' && (
-                  <group>
-                    {/* Glowing Cyan Dealership Signboard */}
-                    <mesh position={[b.size[0] / 2 + 0.1, b.size[1] / 2 - 1.2, 0]} rotation={[0, Math.PI / 2, 0]}>
-                      <boxGeometry args={[16, 2.0, 0.2]} />
-                      <meshStandardMaterial color="#0d0e10" />
-                    </mesh>
-                    <mesh position={[b.size[0] / 2 + 0.22, b.size[1] / 2 - 1.2, 0]} rotation={[0, Math.PI / 2, 0]}>
-                      <boxGeometry args={[15.2, 1.3, 0.05]} />
-                      <meshStandardMaterial color="#00B0FF" emissive="#00B0FF" emissiveIntensity={2.4} />
-                    </mesh>
-                    {/* Tinted Showroom Glass Front */}
-                    <mesh position={[b.size[0] / 2 + 0.08, -0.6, 0]} rotation={[0, Math.PI / 2, 0]}>
-                      <planeGeometry args={[20, 5.2]} />
-                      <meshPhysicalMaterial
-                        color="#38bdf8"
-                        transmission={0.85}
-                        transparent
-                        opacity={0.88}
-                        roughness={0.1}
-                        metalness={0.2}
-                      />
-                    </mesh>
-                  </group>
-                )}
-              </group>
-            </RigidBody>
-          ))}
-
-          {/* --- CAR LOT OUTDOOR SHOWCASE CARS ON DISPLAY PEDESTALS --- */}
-          {/* Display Pedestal 1: Shinobi Type-R in Emerald Green */}
-          <group position={[-76, 0, -15]} rotation={[0, 0.35, 0]}>
-            {/* Illuminated Pedestal */}
-            <mesh position={[0, 0.22, 0]} receiveShadow>
-              <cylinderGeometry args={[3.2, 3.4, 0.44, 32]} />
-              <meshStandardMaterial color="#1a1c22" metalness={0.5} roughness={0.3} />
-            </mesh>
-            <mesh position={[0, 0.445, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-              <ringGeometry args={[3.0, 3.2, 32]} />
-              <meshStandardMaterial color="#00B0FF" emissive="#00B0FF" emissiveIntensity={2.0} />
-            </mesh>
-            {/* Static 3D Showcase Car (Shinobi RX Tuner) */}
-            <group position={[0, 0.72, 0]}>
-              <mesh castShadow>
-                <boxGeometry args={[1.82, 0.52, 4.1]} />
-                <meshStandardMaterial color="#059669" metalness={0.7} roughness={0.2} />
-              </mesh>
-              <mesh position={[0, 0.44, -0.3]} castShadow>
-                <boxGeometry args={[1.5, 0.46, 2.2]} />
-                <meshStandardMaterial color="#18181b" roughness={0.1} metalness={0.8} />
-              </mesh>
-              {/* Tuner Wing */}
-              <mesh position={[0, 0.65, 1.85]} castShadow>
-                <boxGeometry args={[1.72, 0.08, 0.42]} />
-                <meshStandardMaterial color="#18181b" roughness={0.3} />
-              </mesh>
-              <pointLight position={[0, 2.5, 0]} intensity={3} distance={8} color="#00B0FF" />
-            </group>
-          </group>
-
-          {/* Display Pedestal 2: Vanguard V12 in Amber Gold */}
-          <group position={[-76, 0, 15]} rotation={[0, -0.35, 0]}>
-            {/* Illuminated Pedestal */}
-            <mesh position={[0, 0.22, 0]} receiveShadow>
-              <cylinderGeometry args={[3.2, 3.4, 0.44, 32]} />
-              <meshStandardMaterial color="#1a1c22" metalness={0.5} roughness={0.3} />
-            </mesh>
-            <mesh position={[0, 0.445, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-              <ringGeometry args={[3.0, 3.2, 32]} />
-              <meshStandardMaterial color="#FF9900" emissive="#FF9900" emissiveIntensity={2.0} />
-            </mesh>
-            {/* Static 3D Showcase Car (Vanguard V12 Supercar) */}
-            <group position={[0, 0.72, 0]}>
-              <mesh castShadow>
-                <boxGeometry args={[1.92, 0.48, 4.3]} />
-                <meshStandardMaterial color="#d97706" metalness={0.75} roughness={0.18} />
-              </mesh>
-              <mesh position={[0, 0.42, -0.2]} castShadow>
-                <boxGeometry args={[1.55, 0.42, 2.4]} />
-                <meshStandardMaterial color="#18181b" roughness={0.1} metalness={0.8} />
-              </mesh>
-              <pointLight position={[0, 2.5, 0]} intensity={3} distance={8} color="#FF9900" />
-            </group>
-          </group>
-
-          {/* --- INTERACTIVE GLOWING WORLD BEACONS (GARAGE, CAR LOT, RACE EVENTS) --- */}
-          {FREE_ROAM_BEACONS.map((beacon) => (
-            <group key={beacon.id} position={[beacon.x, 0, beacon.z]}>
-              {/* Outer Ground Pulse Ring */}
-              <mesh position={[0, 0.024, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                <ringGeometry args={[beacon.radius - 0.45, beacon.radius, 48]} />
-                <meshStandardMaterial
-                  color={beacon.color}
-                  emissive={beacon.glowColor}
-                  emissiveIntensity={2.5}
-                  roughness={0.2}
-                  polygonOffset
-                  polygonOffsetFactor={-3}
-                />
-              </mesh>
-
-              {/* Inner Translucent Ground Pad */}
-              <mesh position={[0, 0.022, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                <circleGeometry args={[beacon.radius - 0.48, 48]} />
-                <meshBasicMaterial
-                  color={beacon.color}
-                  transparent
-                  opacity={0.18}
-                  polygonOffset
-                  polygonOffsetFactor={-2}
-                />
-              </mesh>
-
-              {/* Vertical Translucent Light Column */}
-              <mesh position={[0, 6, 0]}>
-                <cylinderGeometry args={[beacon.radius * 0.7, beacon.radius * 0.9, 12, 32, 1, true]} />
-                <meshBasicMaterial
-                  color={beacon.color}
-                  transparent
-                  opacity={0.12}
-                  side={THREE.DoubleSide}
-                />
-              </mesh>
-
-              {/* Floating Overhead Beacon Gem */}
-              <group position={[0, 4.5, 0]}>
-                <mesh rotation={[0.4, 0.4, 0]}>
-                  <octahedronGeometry args={[0.85, 0]} />
-                  <meshStandardMaterial
-                    color={beacon.color}
-                    emissive={beacon.glowColor}
-                    emissiveIntensity={2.2}
-                    metalness={0.3}
-                    roughness={0.2}
-                  />
-                </mesh>
-                <pointLight position={[0, 0, 0]} intensity={4.5} distance={14} color={beacon.color} />
-              </group>
-            </group>
-          ))}
-
-          {/* --- STREETLIGHT POSTS --- */}
-          {STREETLIGHT_POLES.map((pole, i) => (
-            <group key={`light-${i}`} position={[pole.x, 0, pole.z]} rotation={[0, pole.rotationY, 0]}>
-              {/* Vertical Dark Steel Post */}
-              <mesh position={[0, 3.8, 0]} castShadow>
-                <cylinderGeometry args={[0.08, 0.12, 7.6, 8]} />
-                <meshStandardMaterial color="#1c1f26" metalness={0.7} roughness={0.3} />
-              </mesh>
-              {/* Overhanging Arm */}
-              <mesh position={[0.7, 7.5, 0]} rotation={[0, 0, -Math.PI / 6]} castShadow>
-                <cylinderGeometry args={[0.06, 0.06, 1.6, 8]} />
-                <meshStandardMaterial color="#1c1f26" metalness={0.7} roughness={0.3} />
-              </mesh>
-              {/* Light Fixture */}
-              <mesh position={[1.35, 7.8, 0]}>
-                <boxGeometry args={[0.42, 0.12, 0.24]} />
-                <meshStandardMaterial color="#0f1115" metalness={0.5} roughness={0.4} />
-              </mesh>
-              <mesh position={[1.35, 7.72, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                <planeGeometry args={[0.36, 0.18]} />
-                <meshBasicMaterial color="#fef08a" />
-              </mesh>
-            </group>
-          ))}
-
-          {/* --- OUTER 560x560 CITY PERIMETER BOUNDARY WALLS --- */}
-          <RigidBody type="fixed" position={[FREE_ROAM_BOUNDS.centerX, 2.5, FREE_ROAM_BOUNDS.minZ]}>
-            <mesh receiveShadow>
-              <boxGeometry args={[FREE_ROAM_BOUNDS.width, 5, 2]} />
-              <meshStandardMaterial color="#1f242e" roughness={0.8} />
-            </mesh>
-          </RigidBody>
-          <RigidBody type="fixed" position={[FREE_ROAM_BOUNDS.centerX, 2.5, FREE_ROAM_BOUNDS.maxZ]}>
-            <mesh receiveShadow>
-              <boxGeometry args={[FREE_ROAM_BOUNDS.width, 5, 2]} />
-              <meshStandardMaterial color="#1f242e" roughness={0.8} />
-            </mesh>
-          </RigidBody>
-          <RigidBody type="fixed" position={[FREE_ROAM_BOUNDS.minX, 2.5, FREE_ROAM_BOUNDS.centerZ]}>
-            <mesh receiveShadow>
-              <boxGeometry args={[2, 5, FREE_ROAM_BOUNDS.depth]} />
-              <meshStandardMaterial color="#1f242e" roughness={0.8} />
-            </mesh>
-          </RigidBody>
-          <RigidBody type="fixed" position={[FREE_ROAM_BOUNDS.maxX, 2.5, FREE_ROAM_BOUNDS.centerZ]}>
-            <mesh receiveShadow>
-              <boxGeometry args={[2, 5, FREE_ROAM_BOUNDS.depth]} />
-              <meshStandardMaterial color="#1f242e" roughness={0.8} />
-            </mesh>
-          </RigidBody>
-        </group>
-      )}
 
       {/* Garage / Menu / Career / Car Lot Showroom Turntable */}
       {isShowroom && (

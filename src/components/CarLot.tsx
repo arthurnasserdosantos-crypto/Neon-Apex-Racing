@@ -193,18 +193,18 @@ export function CarLot() {
         </div>
 
         {/* Carousel Vehicle Selector Navigation Controls */}
-        <div className="flex flex-col gap-4 pointer-events-auto max-w-xl">
+        <div className="flex flex-col gap-4 pointer-events-auto max-w-3xl w-full">
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => handleSelectCar((browseIndex - 1 + CAR_ORDER.length) % CAR_ORDER.length)}
-              className="p-3 mw-slant bg-[#1A1C20]/90 hover:bg-[#FF9900] border border-[#3A3E45] text-[#F4F4F4] hover:text-[#0D0E10] transition-colors cursor-pointer"
+              className="p-3 mw-slant bg-[#1A1C20]/90 hover:bg-[#FF9900] border border-[#3A3E45] text-[#F4F4F4] hover:text-[#0D0E10] transition-colors cursor-pointer shrink-0"
               aria-label="Previous Vehicle"
             >
               <ChevronLeft className="w-5 h-5 mw-unslant" />
             </button>
 
-            <div className="grid grid-cols-3 gap-2 flex-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 flex-1">
               {CAR_ORDER.map((id, index) => {
                 const def = CAR_CATALOG[id];
                 const active = browseIndex === index;
@@ -459,7 +459,7 @@ export function CarLot() {
               <div className="h-2 bg-[#0D0E10] border border-[#3A3E45] overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-[#FF9900] to-[#E65100] transition-all duration-300"
-                  style={{ width: `${Math.min(100, (previewSpecs.topSpeedKph / 260) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (previewSpecs.topSpeedKph / 350) * 100)}%` }}
                 />
               </div>
             </div>

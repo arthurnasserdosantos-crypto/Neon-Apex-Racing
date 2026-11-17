@@ -2,13 +2,18 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Compass, Maximize2, Minimize2 } from 'lucide-react';
 import { useGameStore } from '../store';
 import {
+  FREE_ROAM_BEACONS,
   FREE_ROAM_BOUNDS,
   FREE_ROAM_BUILDINGS,
-  FREE_ROAM_BEACONS,
+  FREE_ROAM_CITY_BLOCKS,
   FREE_ROAM_PYLONS,
+  FREE_ROAM_ROADS,
   carTelemetry,
+  getActiveFreeRoamBeacons,
   raceTelemetry,
 } from '../utils/freeRoamWorld';
+import { MAX_TRAFFIC_CARS, trafficVehicles } from '../utils/freeRoamTraffic';
+import { getCustomCityBounds, getCustomCityObstacleObbs } from '../utils/collisionPhysics';
 import { getBuiltRaceTrack } from '../utils/raceTracks';
 
 const MAP_SIZE = 184;
@@ -107,9 +112,10 @@ export function MiniMap() {
 
       const padding = 12;
       const drawSpan = MAP_SIZE - padding * 2;
-      const activeBounds = activeTrack ? activeTrack.bounds : FREE_ROAM_BOUNDS;
+      const freeRoamBounds = getCustomCityBounds() ?? FREE_ROAM_BOUNDS;
+      const activeBounds = activeTrack ? activeTrack.bounds : freeRoamBounds;
       const fullWorldSpan = Math.max(activeBounds.width, activeBounds.depth);
-      const worldSpan = zoomMode === 'full' ? fullWorldSpan : 120;
+      const worldSpan = zoomMode === 'full' ? fullWorldSpan : 180;
       const scale = drawSpan / worldSpan;
 
       const viewCenterX = zoomMode === 'full' ? activeBounds.centerX : x;
@@ -171,68 +177,103 @@ export function MiniMap() {
           ctx.stroke();
         }
       } else {
-        // --- 2x EXPANDED URBAN FREE ROAM GPS RADAR ---
-        // City perimeter background
-        const bLeft = toPxX(FREE_ROAM_BOUNDS.minX);
-        const bTop = toPxY(FREE_ROAM_BOUNDS.minZ);
-        const bWidth = FREE_ROAM_BOUNDS.width * scale;
-        const bHeight = FREE_ROAM_BOUNDS.depth * scale;
+        // --- FREE ROAM GPS RADAR (Adapts to uploaded glTF city bounds or 1120x1120 procedural grid) ---
+        const bLeft = toPxX(freeRoamBounds.minX);
+        const bTop = toPxY(freeRoamBounds.minZ);
+        const bWidth = freeRoamBounds.width * scale;
+        const bHeight = freeRoamBounds.depth * scale;
 
-        ctx.fillStyle = 'rgba(16, 20, 26, 0.88)';
+        ctx.fillStyle = 'rgba(14, 18, 24, 0.92)';
         ctx.fillRect(bLeft, bTop, bWidth, bHeight);
 
-        // Asphalt Road Grid Ribbons
-        ctx.fillStyle = 'rgba(38, 45, 58, 0.9)';
-        // Grand North-South Boulevard (x = 0, width 16m)
-        ctx.fillRect(toPxX(-8), toPxY(-240), Math.max(3, 16 * scale), 480 * scale);
-        // Central East-West Cross Avenue (z = 0, width 16m)
-        ctx.fillRect(toPxX(-240), toPxY(-8), 480 * scale, Math.max(3, 16 * scale));
-        // District Avenues & Boulevards
-        [-120, 120].map((coord) => {
-          ctx.fillRect(toPxX(-240), toPxY(coord - 7), 480 * scale, Math.max(2.5, 14 * scale));
-          ctx.fillRect(toPxX(coord - 7), toPxY(-240), Math.max(2.5, 14 * scale), 480 * scale);
-        });
-        // Perimeter Highway Loop
-        [-240, 240].map((coord) => {
-          ctx.fillRect(toPxX(-240), toPxY(coord - 8), 480 * scale, Math.max(3, 16 * scale));
-          ctx.fillRect(toPxX(coord - 8), toPxY(-240), Math.max(3, 16 * scale), 480 * scale);
-        });
+        const customObbs = getCustomCityObstacleObbs();
+        if (customObbs) {
+          // Draw uploaded glTF city building footprints (skipping the 4 outer perimeter walls)
+          const bldgCount = Math.max(0, customObbs.length - 4);
+          for (let i = 0; i < bldgCount; i++) {
+            const o = customObbs[i];
+            const wPx = Math.max(2, o.halfW * 2 * scale);
+            const hPx = Math.max(2, o.halfL * 2 * scale);
+            const bx = toPxX(o.cx) - wPx / 2;
+            const by = toPxY(o.cz) - hPx / 2;
+            ctx.fillStyle = 'rgba(42, 52, 70, 0.92)';
+            ctx.fillRect(bx, by, wPx, hPx);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+            ctx.lineWidth = 0.8;
+            ctx.strokeRect(bx, by, wPx, hPx);
+          }
+        } else {
+          // City District Blocks (grass suburbs/parks vs urban concrete)
+          for (let i = 0; i < FREE_ROAM_CITY_BLOCKS.length; i++) {
+            const blk = FREE_ROAM_CITY_BLOCKS[i];
+            const wPx = blk.w * scale;
+            const hPx = blk.d * scale;
+            const bx = toPxX(blk.x) - wPx / 2;
+            const by = toPxY(blk.z) - hPx / 2;
+            ctx.fillStyle =
+              blk.kind === 'grass'
+                ? 'rgba(22, 60, 36, 0.55)'
+                : blk.kind === 'industrial'
+                ? 'rgba(28, 32, 42, 0.7)'
+                : 'rgba(24, 28, 38, 0.75)';
+            ctx.fillRect(bx, by, wPx, hPx);
+          }
 
-        // Yellow Boulevard Centerlines
-        ctx.save();
-        ctx.strokeStyle = 'rgba(250, 204, 21, 0.7)';
-        ctx.lineWidth = Math.max(1, 1.8 * scale);
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(toPxX(0), toPxY(-240));
-        ctx.lineTo(toPxX(0), toPxY(240));
-        ctx.moveTo(toPxX(-240), toPxY(0));
-        ctx.lineTo(toPxX(240), toPxY(0));
-        ctx.stroke();
-        ctx.restore();
+          // Dynamic Asphalt Road Grid Ribbons
+          for (let i = 0; i < FREE_ROAM_ROADS.length; i++) {
+            const r = FREE_ROAM_ROADS[i];
+            ctx.fillStyle = r.isHighway ? 'rgba(55, 65, 81, 0.95)' : 'rgba(42, 50, 64, 0.92)';
+            if (r.axis === 'z') {
+              const rw = r.length * scale;
+              const rh = Math.max(2.2, r.width * scale);
+              ctx.fillRect(toPxX(-r.length / 2), toPxY(r.coord) - rh / 2, rw, rh);
+            } else {
+              const rw = Math.max(2.2, r.width * scale);
+              const rh = r.length * scale;
+              ctx.fillRect(toPxX(r.coord) - rw / 2, toPxY(-r.length / 2), rw, rh);
+            }
+          }
 
-        // City Buildings Footprints
-        for (let i = 0; i < FREE_ROAM_BUILDINGS.length; i++) {
-          const b = FREE_ROAM_BUILDINGS[i];
-          const wPx = Math.max(2, b.size[0] * scale);
-          const hPx = Math.max(2, b.size[2] * scale);
-          const bx = toPxX(b.x) - wPx / 2;
-          const by = toPxY(b.z) - hPx / 2;
+          // Yellow Grand Boulevard Centerlines
+          ctx.save();
+          ctx.strokeStyle = 'rgba(250, 204, 21, 0.65)';
+          ctx.lineWidth = Math.max(1, 1.5 * scale);
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.moveTo(toPxX(0), toPxY(-489));
+          ctx.lineTo(toPxX(0), toPxY(489));
+          ctx.moveTo(toPxX(-489), toPxY(0));
+          ctx.lineTo(toPxX(489), toPxY(0));
+          ctx.stroke();
+          ctx.restore();
 
-          ctx.fillStyle = b.type === 'garage_hq'
-            ? 'rgba(255, 153, 0, 0.28)'
-            : b.type === 'dealership'
-            ? 'rgba(0, 176, 255, 0.28)'
-            : 'rgba(32, 38, 50, 0.85)';
-          ctx.fillRect(bx, by, wPx, hPx);
+          // City Buildings & Houses Footprints
+          for (let i = 0; i < FREE_ROAM_BUILDINGS.length; i++) {
+            const b = FREE_ROAM_BUILDINGS[i];
+            const wPx = Math.max(1.8, b.size[0] * scale);
+            const hPx = Math.max(1.8, b.size[2] * scale);
+            const bx = toPxX(b.x) - wPx / 2;
+            const by = toPxY(b.z) - hPx / 2;
 
-          ctx.strokeStyle = b.type === 'garage_hq'
-            ? '#FF9900'
-            : b.type === 'dealership'
-            ? '#00B0FF'
-            : 'rgba(255, 255, 255, 0.12)';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(bx, by, wPx, hPx);
+            ctx.fillStyle =
+              b.type === 'garage_hq'
+                ? 'rgba(255, 153, 0, 0.35)'
+                : b.type === 'dealership'
+                ? 'rgba(0, 176, 255, 0.35)'
+                : b.type === 'house'
+                ? 'rgba(148, 163, 184, 0.68)'
+                : 'rgba(38, 46, 62, 0.9)';
+            ctx.fillRect(bx, by, wPx, hPx);
+
+            ctx.strokeStyle =
+              b.type === 'garage_hq'
+                ? '#FF9900'
+                : b.type === 'dealership'
+                ? '#00B0FF'
+                : 'rgba(255, 255, 255, 0.14)';
+            ctx.lineWidth = 0.8;
+            ctx.strokeRect(bx, by, wPx, hPx);
+          }
         }
 
         // Outer City Perimeter Wall Border
@@ -241,8 +282,9 @@ export function MiniMap() {
         ctx.strokeRect(bLeft, bTop, bWidth, bHeight);
 
         // Interactive World Beacons (Garage, Car Lot, Street Race Events)
-        for (let i = 0; i < FREE_ROAM_BEACONS.length; i++) {
-          const beacon = FREE_ROAM_BEACONS[i];
+        const activeBeacons = getActiveFreeRoamBeacons();
+        for (let i = 0; i < activeBeacons.length; i++) {
+          const beacon = activeBeacons[i];
           const bx = toPxX(beacon.x);
           const by = toPxY(beacon.z);
           const rPx = Math.max(3.5, beacon.radius * scale);
@@ -293,6 +335,24 @@ export function MiniMap() {
           }
           ctx.strokeStyle = 'rgba(255, 153, 0, 0.5)';
           ctx.lineWidth = 1.6;
+          ctx.stroke();
+        }
+
+        // Active AI Traffic Car Blips
+        const tLimit = Math.min(useGameStore.getState().trafficCount, MAX_TRAFFIC_CARS);
+        const blipR = zoomMode === 'follow' ? 2.2 : 1.7;
+        ctx.fillStyle = '#38bdf8';
+        ctx.strokeStyle = '#090c12';
+        ctx.lineWidth = 0.8;
+        for (let i = 0; i < tLimit; i++) {
+          const tv = trafficVehicles[i];
+          if (!tv.active) continue;
+          const tpx = toPxX(tv.x);
+          const tpy = toPxY(tv.z);
+          if (tpx < -4 || tpx > MAP_SIZE + 4 || tpy < -4 || tpy > MAP_SIZE + 4) continue;
+          ctx.beginPath();
+          ctx.arc(tpx, tpy, blipR, 0, Math.PI * 2);
+          ctx.fill();
           ctx.stroke();
         }
       }

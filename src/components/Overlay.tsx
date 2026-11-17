@@ -7,9 +7,11 @@ import { CarLot } from './CarLot';
 import { HUD } from './HUD';
 import { BottomControlTicker, PlayerRapSheet } from './ShowroomChrome';
 import { DevMenu } from './DevMenu';
+import { TURNTABLE_CONFIG } from '../utils/turntableConfig';
 
 export function Overlay() {
   const view = useGameStore((state) => state.view);
+  const menuTransitionPhase = useGameStore((state) => state.menuTransitionPhase);
   const isShowroom = view === 'MENU' || view === 'GARAGE' || view === 'CAREER' || view === 'CAR_LOT';
 
   const tickerHints =
@@ -77,6 +79,24 @@ export function Overlay() {
 
       {/* Bottom Control Hints & Scrolling Street Scanner Ticker */}
       {isShowroom && <BottomControlTicker hints={tickerHints} />}
+
+      {/* Opaque Transition Curtain hiding turntable/camera snap before smoothly revealing Main Menu */}
+      {menuTransitionPhase !== 'idle' && (
+        <div
+          aria-hidden="true"
+          style={{
+            transitionDuration:
+              menuTransitionPhase === 'fading_in'
+                ? `${TURNTABLE_CONFIG.transitionFadeOutMs}ms`
+                : '0ms',
+          }}
+          className={`fixed inset-0 z-[90] bg-[#07090D] ${
+            menuTransitionPhase === 'covered'
+              ? 'opacity-100 transition-none pointer-events-auto'
+              : 'opacity-0 transition-opacity ease-out pointer-events-none'
+          }`}
+        />
+      )}
     </div>
   );
 }

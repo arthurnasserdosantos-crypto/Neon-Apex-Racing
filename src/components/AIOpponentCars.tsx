@@ -217,8 +217,8 @@ function SingleAIBot({ config, track, raceSessionId, raceState, geometries }: Si
       ? baseMaxMs * 0.35
       : Math.max(config.isBoss ? 17 : 14, baseMaxMs * cornerFactor + botTel.speedRecoil);
 
-    const accelRate = (config.isBoss ? 22 : 15) + track.order * 3.0;
-    const brakeRate = (config.isBoss ? 26 : 20) + track.order * 2.0;
+    const accelRate = Math.min(36, (config.isBoss ? 19 : 14) + track.order * 1.15);
+    const brakeRate = Math.min(44, (config.isBoss ? 25 : 20) + track.order * 1.2);
     let isBraking = false;
 
     if (st.speedMs < desiredSpeedMs) {

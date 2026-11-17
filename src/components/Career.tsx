@@ -120,6 +120,7 @@ export function Career() {
   const status = getProgressionStatus(completedRaces);
   const act1Races = RACE_TRACK_DEFINITIONS.filter((r) => r.act === 1);
   const act2Races = RACE_TRACK_DEFINITIONS.filter((r) => r.act === 2);
+  const act3Races = RACE_TRACK_DEFINITIONS.filter((r) => r.act === 3);
 
   // ESC returns cleanly to Main Menu
   useEffect(() => {
@@ -140,7 +141,7 @@ export function Career() {
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#3A3E45] pb-3 shrink-0">
         <div>
           <div className="text-[10px] font-mono uppercase tracking-[0.25em] text-[#FF9900]">
-            Blacklist Career // Two-Act Dossier
+            Blacklist Career // Three-Act Syndicate · 7 Bosses
           </div>
           <h1 className="font-[family-name:var(--font-display)] italic font-black uppercase text-3xl md:text-4xl tracking-wider text-[#F4F4F4] leading-none mt-0.5">
             Career &amp; Race Select
@@ -243,8 +244,8 @@ export function Career() {
         </div>
       </section>
 
-      {/* ACT II — APEX CHAMPIONSHIP (5 Standard + Final Boss) */}
-      <section className="space-y-2.5 shrink-0 pb-2">
+      {/* ACT II — APEX SYNDICATE (5 Standard + Boss 2) */}
+      <section className="space-y-2.5 shrink-0">
         <div
           className={`flex flex-wrap items-center justify-between gap-3 mw-slant border px-5 py-2 ${
             status.act2Unlocked
@@ -255,11 +256,11 @@ export function Career() {
           <div className="mw-unslant flex items-center gap-3">
             {!status.act2Unlocked && <Lock className="w-4 h-4 text-[#FF9900] shrink-0" />}
             <span className="font-[family-name:var(--font-display)] italic font-black uppercase text-xl tracking-wider text-[#F4F4F4]">
-              Act II · Apex Championship
+              Act II · Apex Syndicate
             </span>
             <span className="text-xs font-mono uppercase tracking-wider text-[#8E9299]">
               {status.act2Unlocked
-                ? 'Races 05–09 + Final Boss Championship'
+                ? 'Races 05–09 + Boss 2 Duel'
                 : 'Locked — Beat Boss 1 (Obsidian Phantom) to Unlock'}
             </span>
           </div>
@@ -267,6 +268,66 @@ export function Career() {
           <div className="mw-unslant flex items-center gap-5 text-xs font-mono uppercase tabular-nums">
             <span className="text-[#8E9299]">
               Won: <strong className="text-[#F4F4F4]">{status.act2Wins}/{status.act2Total}</strong>
+            </span>
+            <span
+              className={
+                status.boss2Defeated
+                  ? 'text-emerald-400 font-bold'
+                  : status.boss2Unlocked
+                  ? 'text-[#FF9900] font-bold'
+                  : 'text-[#8E9299]'
+              }
+            >
+              {status.boss2Defeated
+                ? 'Boss 2 Defeated'
+                : status.boss2Unlocked
+                ? 'Boss 2 Unlocked'
+                : 'Boss 2 Locked'}
+            </span>
+          </div>
+        </div>
+
+        {/* Horizontal Slanted Dossier Card Row */}
+        <div className="flex items-stretch gap-3 overflow-x-auto pb-2 px-3">
+          {act2Races.map((r) => (
+            <BlacklistDossierCard
+              key={r.id}
+              race={r}
+              record={completedRaces[r.id]}
+              unlock={isTrackUnlocked(r.id, completedRaces)}
+              onLaunch={() => {
+                engineAudio.playUiClick();
+                startRace(r.id);
+              }}
+            />
+          ))}
+        </div>
+      </section>
+
+      {/* ACT III — BLACKLIST OVERLORD GAUNTLET (Bosses 3–7) */}
+      <section className="space-y-2.5 shrink-0 pb-4">
+        <div
+          className={`flex flex-wrap items-center justify-between gap-3 mw-slant border px-5 py-2 ${
+            status.act3Unlocked
+              ? 'bg-[#1A1C20]/95 border-[#3A3E45] border-l-4 border-l-[#D32F2F]'
+              : 'bg-[#0D0E10]/90 border-[#3A3E45] border-l-4 border-l-[#52525B]'
+          }`}
+        >
+          <div className="mw-unslant flex items-center gap-3">
+            {!status.act3Unlocked && <Lock className="w-4 h-4 text-[#D32F2F] shrink-0" />}
+            <span className="font-[family-name:var(--font-display)] italic font-black uppercase text-xl tracking-wider text-[#F4F4F4]">
+              Act III · Overlord Boss Gauntlet
+            </span>
+            <span className="text-xs font-mono uppercase tracking-wider text-[#8E9299]">
+              {status.act3Unlocked
+                ? '5 Consecutive 1v1 Blacklist Boss Duels (Bosses 3–7)'
+                : 'Locked — Defeat Boss 2 (Apex Sovereign) to Unlock'}
+            </span>
+          </div>
+
+          <div className="mw-unslant flex items-center gap-5 text-xs font-mono uppercase tabular-nums">
+            <span className="text-[#8E9299]">
+              Bosses: <strong className="text-[#F4F4F4]">{status.act3Wins}/{status.act3Total}</strong>
             </span>
             <span
               className={
@@ -280,15 +341,14 @@ export function Career() {
               {status.finalBossDefeated
                 ? 'Grand Champion'
                 : status.finalBossUnlocked
-                ? 'Final Boss Unlocked'
-                : 'Final Boss Locked'}
+                ? 'Final Boss #7 Ready'
+                : 'Emperor Locked'}
             </span>
           </div>
         </div>
 
-        {/* Horizontal Slanted Dossier Card Row */}
         <div className="flex items-stretch gap-3 overflow-x-auto pb-2 px-3">
-          {act2Races.map((r) => (
+          {act3Races.map((r) => (
             <BlacklistDossierCard
               key={r.id}
               race={r}
@@ -319,6 +379,20 @@ function BlacklistDossierCard({ race, record, unlock, onLaunch }: DossierCardPro
   const locked = !unlock.unlocked;
   const eventNum = String(race.raceNumber).padStart(2, '0');
   const raceTypeLabel = race.laps > 1 ? `Circuit · ${race.laps} Laps` : 'Sprint · 1 Lap';
+  const bossNumber =
+    race.id === 'act1-boss'
+      ? 1
+      : race.id === 'act2-boss'
+      ? 2
+      : race.id === 'act3-boss1'
+      ? 3
+      : race.id === 'act3-boss2'
+      ? 4
+      : race.id === 'act3-boss3'
+      ? 5
+      : race.id === 'act3-boss4'
+      ? 6
+      : 7;
 
   return (
     <button
@@ -342,7 +416,7 @@ function BlacklistDossierCard({ race, record, unlock, onLaunch }: DossierCardPro
           : 'bg-[#1A1C20]/95 border-[#3A3E45] hover:border-[#FF9900] hover:-translate-y-0.5 cursor-pointer'
       }`}
     >
-      {/* Diagonal Hazard Stripes Overlay on Locked Bosses / Locked Act 2 */}
+      {/* Diagonal Hazard Stripes Overlay on Locked Bosses / Locked Acts */}
       {locked && (
         <div
           className="absolute inset-0 mw-hazard-stripes pointer-events-none z-10"
@@ -356,7 +430,11 @@ function BlacklistDossierCard({ race, record, unlock, onLaunch }: DossierCardPro
           <div className="mw-unslant flex flex-col items-center gap-2 bg-[#0D0E10]/95 border border-[#FF9900]/60 px-3.5 py-2.5 shadow-xl">
             <Lock className="w-5 h-5 text-[#FF9900]" />
             <span className="font-[family-name:var(--font-display)] italic font-black uppercase text-xs tracking-widest text-[#FF9900]">
-              {race.isBoss ? 'Beat All Section Races To Unlock' : 'Act Locked'}
+              {race.act === 3
+                ? 'Boss Duel Locked'
+                : race.isBoss
+                ? 'Beat All Section Races To Unlock'
+                : 'Act Locked'}
             </span>
             <span className="text-[10px] font-mono uppercase text-[#F4F4F4] leading-snug">
               {unlock.reason}
@@ -374,10 +452,10 @@ function BlacklistDossierCard({ race, record, unlock, onLaunch }: DossierCardPro
                 race.isBoss ? 'text-2xl text-[#D32F2F]' : 'text-3xl text-[#FF9900]'
               }`}
             >
-              {race.isFinalBoss ? 'FINAL' : race.isBoss ? 'BOSS 1' : `#${eventNum}`}
+              {race.isFinalBoss ? 'FINAL · B7' : race.isBoss ? `BOSS ${bossNumber}` : `#${eventNum}`}
             </div>
             <div className="text-[10px] font-mono uppercase tracking-wider text-[#8E9299] mt-0.5">
-              {race.isBoss ? '1v1 Blacklist Duel' : raceTypeLabel}
+              {race.isBoss ? `1v1 Blacklist Duel` : raceTypeLabel}
             </div>
           </div>
 

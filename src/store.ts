@@ -1,17 +1,23 @@
 import { create } from 'zustand';
 import {
   ACT1_BOSS_ID,
+  ACT2_BOSS_ID,
   FINAL_BOSS_ID,
   getBuiltRaceTrack,
   getProgressionStatus,
   getScaledPayout,
   isTrackUnlocked,
+  RACE_TRACK_DEFINITIONS,
   RaceCompletionRecord,
 } from './utils/raceTracks';
 import { CAR_CATALOG } from './utils/carCatalog';
+import { MAX_UPGRADE_STAGE } from './utils/carTuning';
 import { TURNTABLE_CONFIG } from './utils/turntableConfig';
+import { bgmPlayer } from './utils/bgmPlayer';
 
+export type AppStationMode = 'STATION' | 'NEON_APEX' | 'SHOOTER' | 'GEOMETRY_DASH' | 'ROBLOX' | 'GUITAR_HERO' | 'MARIO_3D';
 export type ViewState = 'MENU' | 'GARAGE' | 'CAREER' | 'FREE_ROAM' | 'RACE' | 'CAR_LOT';
+export type MenuTransitionPhase = 'idle' | 'covered' | 'fading_in';
 
 export interface CarBuildConfig {
   color: string;
@@ -26,6 +32,7 @@ interface PersistedSaveData {
   cash: number;
   driverAlias: string;
   autoOrbitCam: boolean;
+  trafficCount?: number;
   ownedCarIds: string[];
   selectedCarId: string;
   cars: Record<string, CarBuildConfig>;
@@ -59,6 +66,22 @@ const DEFAULT_CARS: Record<string, CarBuildConfig> = {
     handlingLevel: 1,
     vinyl: 'none',
   },
+  tempest_gt3: {
+    color: '#10b981',
+    wheelsColor: '#18181b',
+    speedLevel: 1,
+    accelLevel: 1,
+    handlingLevel: 1,
+    vinyl: 'stripes',
+  },
+  hyperion_lm: {
+    color: '#a855f7',
+    wheelsColor: '#e4e4e7',
+    speedLevel: 1,
+    accelLevel: 1,
+    handlingLevel: 1,
+    vinyl: 'flames',
+  },
 };
 
 function loadSavedProgress(): PersistedSaveData {
@@ -66,6 +89,7 @@ function loadSavedProgress(): PersistedSaveData {
     cash: 1500,
     driverAlias: 'NIGHT_RUNNER',
     autoOrbitCam: true,
+    trafficCount: 24,
     ownedCarIds: ['apex_gt'],
     selectedCarId: 'apex_gt',
     cars: { ...DEFAULT_CARS },
@@ -91,11 +115,14 @@ function loadSavedProgress(): PersistedSaveData {
         ? parsed.selectedCarId
         : ownedCarIds[0];
 
-    const cars: Record<string, CarBuildConfig> = {
-      apex_gt: { ...DEFAULT_CARS.apex_gt, ...(parsed.cars?.apex_gt ?? parsed.car ?? {}) },
-      shinobi_rx: { ...DEFAULT_CARS.shinobi_rx, ...(parsed.cars?.shinobi_rx ?? {}) },
-      vanguard_v12: { ...DEFAULT_CARS.vanguard_v12, ...(parsed.cars?.vanguard_v12 ?? {}) },
-    };
+    const cars: Record<string, CarBuildConfig> = {};
+    for (const id of Object.keys(DEFAULT_CARS)) {
+      const legacyApexFallback = id === 'apex_gt' ? parsed.car : undefined;
+      cars[id] = {
+        ...DEFAULT_CARS[id],
+        ...(parsed.cars?.[id] ?? legacyApexFallback ?? {}),
+      };
+    }
 
     return {
       cash: typeof parsed.cash === 'number' && Number.isFinite(parsed.cash) ? parsed.cash : 1500,
@@ -104,6 +131,10 @@ function loadSavedProgress(): PersistedSaveData {
           ? parsed.driverAlias.trim().slice(0, 18).toUpperCase()
           : 'NIGHT_RUNNER',
       autoOrbitCam: typeof parsed.autoOrbitCam === 'boolean' ? parsed.autoOrbitCam : true,
+      trafficCount:
+        typeof parsed.trafficCount === 'number' && Number.isFinite(parsed.trafficCount)
+          ? Math.max(0, Math.min(60, Math.round(parsed.trafficCount)))
+          : 24,
       ownedCarIds,
       selectedCarId,
       cars,
@@ -117,21 +148,67 @@ function loadSavedProgress(): PersistedSaveData {
   }
 }
 
+let cachedTrafficCount = 24;
+
 function persistProgress(data: PersistedSaveData) {
+  if (typeof data.trafficCount === 'number') {
+    cachedTrafficCount = data.trafficCount;
+  }
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(data));
+    window.localStorage.setItem(
+      SAVE_STORAGE_KEY,
+      JSON.stringify({ ...data, trafficCount: data.trafficCount ?? cachedTrafficCount }),
+    );
   } catch {
     // Ignore storage quota / private-browsing errors cleanly
   }
 }
 
+let snapHoldTimer: number | null = null;
+let fadeRevealTimer: number | null = null;
+
+function clearMenuTransitionTimers() {
+  if (typeof window === 'undefined') return;
+  if (snapHoldTimer !== null) {
+    window.clearTimeout(snapHoldTimer);
+    snapHoldTimer = null;
+  }
+  if (fadeRevealTimer !== null) {
+    window.clearTimeout(fadeRevealTimer);
+    fadeRevealTimer = null;
+  }
+}
+
+function scheduleMenuTransitionTimers(
+  set: (partial: Partial<GameState> | ((state: GameState) => Partial<GameState>)) => void,
+) {
+  clearMenuTransitionTimers();
+  if (typeof window === 'undefined') return;
+
+  snapHoldTimer = window.setTimeout(() => {
+    snapHoldTimer = null;
+    set((state) => (state.view === 'MENU' ? { menuTransitionPhase: 'fading_in' } : {}));
+
+    fadeRevealTimer = window.setTimeout(() => {
+      fadeRevealTimer = null;
+      set((state) =>
+        state.view === 'MENU'
+          ? { menuTransitionPhase: 'idle', orbitInputLocked: false }
+          : { orbitInputLocked: false },
+      );
+    }, TURNTABLE_CONFIG.transitionFadeOutMs);
+  }, TURNTABLE_CONFIG.transitionSnapHoldMs);
+}
+
 export interface GameState {
+  appStationMode: AppStationMode;
   view: ViewState;
   previousView: ViewState;
   cash: number;
   driverAlias: string;
   autoOrbitCam: boolean;
+  trafficCount: number;
   ownedCarIds: string[];
   selectedCarId: string;
   cars: Record<string, CarBuildConfig>;
@@ -152,19 +229,23 @@ export interface GameState {
   currentReward: number;
   currentSpeed: number;
   justUnlockedAct2: boolean;
+  justUnlockedAct3: boolean;
   justCompletedGame: boolean;
   isPaused: boolean;
   completedRaces: Record<string, RaceCompletionRecord>;
 
   pauseStartTimestamp: number;
   turntableResetId: number;
-  isTransitionFading: boolean;
+  menuTransitionPhase: MenuTransitionPhase;
+  orbitInputLocked: boolean;
 
   // Actions
+  setAppStationMode: (mode: AppStationMode) => void;
   setView: (view: ViewState) => void;
   openCarLot: (fromView?: ViewState) => void;
   setDriverAlias: (alias: string) => void;
   setAutoOrbitCam: (enabled: boolean) => void;
+  setTrafficCount: (count: number) => void;
   addCash: (amount: number) => void;
   spendCash: (amount: number) => boolean;
   buyCar: (carId: string) => boolean;
@@ -182,7 +263,6 @@ export interface GameState {
   restartRace: () => void;
   resetProgression: () => void;
   resetTurntableShowcase: () => void;
-  setTransitionFading: (fading: boolean) => void;
 
   // Developer Override Actions
   setCash: (amount: number) => void;
@@ -191,20 +271,24 @@ export interface GameState {
   resetCarStats: (carId?: string) => void;
   unlockAllCars: () => void;
   unlockAct2Dev: () => void;
+  unlockAct3Dev: () => void;
   completeAllRacesDev: () => void;
   toggleRaceCompletedDev: (trackId: string) => void;
   instantWinCurrentRace: () => void;
 }
 
 const saved = loadSavedProgress();
+cachedTrafficCount = saved.trafficCount ?? 24;
 const initialTrack = getBuiltRaceTrack('act1-r1');
 
 export const useGameStore = create<GameState>((set, get) => ({
+  appStationMode: 'STATION',
   view: 'MENU',
   previousView: 'MENU',
   cash: saved.cash,
   driverAlias: saved.driverAlias,
   autoOrbitCam: saved.autoOrbitCam,
+  trafficCount: saved.trafficCount ?? 24,
   ownedCarIds: saved.ownedCarIds,
   selectedCarId: saved.selectedCarId,
   cars: saved.cars,
@@ -225,44 +309,64 @@ export const useGameStore = create<GameState>((set, get) => ({
   currentReward: initialTrack.reward,
   currentSpeed: 0,
   justUnlockedAct2: false,
+  justUnlockedAct3: false,
   justCompletedGame: false,
   isPaused: false,
   pauseStartTimestamp: 0,
   completedRaces: saved.completedRaces,
   turntableResetId: 0,
-  isTransitionFading: false,
+  menuTransitionPhase: 'idle',
+  orbitInputLocked: false,
 
-  setTransitionFading: (fading) => set({ isTransitionFading: fading }),
-
-  resetTurntableShowcase: () => {
-    set((state) => ({
-      turntableResetId: state.turntableResetId + 1,
-      isTransitionFading: true,
-    }));
-    setTimeout(() => {
-      get().setTransitionFading(false);
-    }, TURNTABLE_CONFIG.transitionDurationMs);
+  setAppStationMode: (mode) => {
+    if (mode === 'STATION') {
+      bgmPlayer.setTrack('MENU');
+    } else if (mode === 'SHOOTER') {
+      bgmPlayer.setTrack('GAMEPLAY', true);
+    } else if (mode === 'GEOMETRY_DASH' || mode === 'ROBLOX' || mode === 'GUITAR_HERO') {
+      bgmPlayer.pause();
+    } else if (mode === 'NEON_APEX') {
+      const curView = get().view;
+      if (curView === 'RACE' || curView === 'FREE_ROAM') {
+        bgmPlayer.restartTrack('GAMEPLAY');
+      } else {
+        bgmPlayer.restartTrack('MENU');
+      }
+    }
+    set({ appStationMode: mode });
   },
 
-  setView: (view) =>
+  resetTurntableShowcase: () => {
+    scheduleMenuTransitionTimers(set);
+    set((state) => ({
+      turntableResetId: state.turntableResetId + 1,
+      menuTransitionPhase: 'covered',
+      orbitInputLocked: true,
+    }));
+  },
+
+  setView: (view) => {
+    if (view === 'RACE' || view === 'FREE_ROAM') {
+      bgmPlayer.setTrack('GAMEPLAY');
+    } else {
+      bgmPlayer.setTrack('MENU');
+    }
+
     set((state) => {
       const isEnteringMenu = view === 'MENU' && state.view !== 'MENU';
-      const nextTurntableResetId = isEnteringMenu
-        ? state.turntableResetId + 1
-        : state.turntableResetId;
-      const nextIsTransitionFading = isEnteringMenu ? true : state.isTransitionFading;
 
       if (isEnteringMenu) {
-        setTimeout(() => {
-          get().setTransitionFading(false);
-        }, TURNTABLE_CONFIG.transitionDurationMs);
+        scheduleMenuTransitionTimers(set);
+      } else {
+        clearMenuTransitionTimers();
       }
 
       return {
         previousView: state.view !== 'CAR_LOT' ? state.view : state.previousView,
         view,
-        turntableResetId: nextTurntableResetId,
-        isTransitionFading: nextIsTransitionFading,
+        turntableResetId: isEnteringMenu ? state.turntableResetId + 1 : state.turntableResetId,
+        menuTransitionPhase: isEnteringMenu ? 'covered' : 'idle',
+        orbitInputLocked: isEnteringMenu,
         raceState: 'idle',
         countdownValue: null,
         currentSpeed: 0,
@@ -270,17 +374,22 @@ export const useGameStore = create<GameState>((set, get) => ({
         justCompletedGame: false,
         isPaused: false,
       };
-    }),
+    });
+  },
 
-  openCarLot: (fromView) =>
+  openCarLot: (fromView) => {
+    clearMenuTransitionTimers();
     set((state) => ({
       previousView: fromView ?? (state.view !== 'CAR_LOT' ? state.view : 'MENU'),
       view: 'CAR_LOT',
+      menuTransitionPhase: 'idle',
+      orbitInputLocked: false,
       raceState: 'idle',
       countdownValue: null,
       currentSpeed: 0,
       isPaused: false,
-    })),
+    }));
+  },
 
   setDriverAlias: (alias) =>
     set((state) => {
@@ -303,12 +412,29 @@ export const useGameStore = create<GameState>((set, get) => ({
         cash: state.cash,
         driverAlias: state.driverAlias,
         autoOrbitCam: enabled,
+        trafficCount: state.trafficCount,
         ownedCarIds: state.ownedCarIds,
         selectedCarId: state.selectedCarId,
         cars: state.cars,
         completedRaces: state.completedRaces,
       });
       return { autoOrbitCam: enabled };
+    }),
+
+  setTrafficCount: (count) =>
+    set((state) => {
+      const clamped = Math.max(0, Math.min(60, Math.round(count)));
+      persistProgress({
+        cash: state.cash,
+        driverAlias: state.driverAlias,
+        autoOrbitCam: state.autoOrbitCam,
+        trafficCount: clamped,
+        ownedCarIds: state.ownedCarIds,
+        selectedCarId: state.selectedCarId,
+        cars: state.cars,
+        completedRaces: state.completedRaces,
+      });
+      return { trafficCount: clamped };
     }),
 
   addCash: (amount) =>
@@ -446,7 +572,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   upgradeStat: (stat, cost) => {
     const { cash, driverAlias, autoOrbitCam, car, cars, selectedCarId, ownedCarIds, completedRaces } = get();
-    if (cash >= cost && car[stat] < 5) {
+    if (cash >= cost && car[stat] < MAX_UPGRADE_STAGE) {
       const nextCash = cash - cost;
       const nextCar = { ...car, [stat]: car[stat] + 1 };
       const nextCars = { ...cars, [selectedCarId]: nextCar };
@@ -470,9 +596,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!isTrackUnlocked(trackId, completedRaces).unlocked) {
       return false;
     }
+    clearMenuTransitionTimers();
+    bgmPlayer.setTrack('GAMEPLAY');
     const track = getBuiltRaceTrack(trackId);
     set({
       view: 'RACE',
+      menuTransitionPhase: 'idle',
+      orbitInputLocked: false,
       raceState: 'countdown',
       raceSessionId: raceSessionId + 1,
       countdownValue: 3,
@@ -489,6 +619,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       currentReward: track.reward,
       currentSpeed: 0,
       justUnlockedAct2: false,
+      justUnlockedAct3: false,
       justCompletedGame: false,
       isPaused: false,
     });
@@ -527,6 +658,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       const justUnlockedAct2 =
         state.activeTrackId === ACT1_BOSS_ID && placement === 1 && !prevStatus.act2Unlocked;
+      const justUnlockedAct3 =
+        state.activeTrackId === ACT2_BOSS_ID && placement === 1 && !prevStatus.act3Unlocked;
       const justCompletedGame =
         state.activeTrackId === FINAL_BOSS_ID && placement === 1;
 
@@ -549,6 +682,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         raceTime: elapsedMs,
         completedRaces: nextCompleted,
         justUnlockedAct2,
+        justUnlockedAct3,
         justCompletedGame,
         isPaused: false,
       };
@@ -612,6 +746,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       completedRaces: fresh.completedRaces,
       activeTrackId: 'act1-r1',
       justUnlockedAct2: false,
+      justUnlockedAct3: false,
       justCompletedGame: false,
     });
   },
@@ -635,7 +770,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => {
       const carId = targetCarId ?? state.selectedCarId;
       const currentCar = state.cars[carId] ?? state.car;
-      const clampedLevel = Math.max(1, Math.min(5, Math.round(level)));
+      const clampedLevel = Math.max(1, Math.min(MAX_UPGRADE_STAGE, Math.round(level)));
       const nextCar = { ...currentCar, [stat]: clampedLevel };
       const nextCars = { ...state.cars, [carId]: nextCar };
       persistProgress({
@@ -659,9 +794,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       const currentCar = state.cars[carId] ?? state.car;
       const nextCar = {
         ...currentCar,
-        speedLevel: 5,
-        accelLevel: 5,
-        handlingLevel: 5,
+        speedLevel: MAX_UPGRADE_STAGE,
+        accelLevel: MAX_UPGRADE_STAGE,
+        handlingLevel: MAX_UPGRADE_STAGE,
       };
       const nextCars = { ...state.cars, [carId]: nextCar };
       persistProgress({
@@ -756,12 +891,28 @@ export const useGameStore = create<GameState>((set, get) => ({
       return { completedRaces: nextCompleted };
     }),
 
+  unlockAct3Dev: () =>
+    set((state) => {
+      const act1And2Tracks = RACE_TRACK_DEFINITIONS.filter((t) => t.act <= 2).map((t) => t.id);
+      const nextCompleted = { ...state.completedRaces };
+      for (const tid of act1And2Tracks) {
+        nextCompleted[tid] = { bestPosition: 1, bestTimeMs: 39500 };
+      }
+      persistProgress({
+        cash: state.cash,
+        driverAlias: state.driverAlias,
+        autoOrbitCam: state.autoOrbitCam,
+        ownedCarIds: state.ownedCarIds,
+        selectedCarId: state.selectedCarId,
+        cars: state.cars,
+        completedRaces: nextCompleted,
+      });
+      return { completedRaces: nextCompleted };
+    }),
+
   completeAllRacesDev: () =>
     set((state) => {
-      const allTrackIds = [
-        'act1-r1', 'act1-r2', 'act1-r3', 'act1-r4', ACT1_BOSS_ID,
-        'act2-r5', 'act2-r6', 'act2-r7', 'act2-r8', 'act2-r9', FINAL_BOSS_ID,
-      ];
+      const allTrackIds = RACE_TRACK_DEFINITIONS.map((t) => t.id);
       const nextCompleted = { ...state.completedRaces };
       for (const tid of allTrackIds) {
         nextCompleted[tid] = { bestPosition: 1, bestTimeMs: 38500 };

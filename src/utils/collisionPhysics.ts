@@ -1,4 +1,10 @@
-import { FREE_ROAM_BOUNDS, FREE_ROAM_BUILDINGS } from './freeRoamWorld';
+import {
+  FREE_ROAM_BOUNDS,
+  FREE_ROAM_BUILDINGS,
+  FREE_ROAM_CONTAINERS,
+  FREE_ROAM_PARKED_CARS,
+  FREE_ROAM_TREES,
+} from './freeRoamWorld';
 import { BuiltRaceTrack } from './raceTracks';
 
 export interface OBB2D {
@@ -157,7 +163,7 @@ export function getTrackBarrierObbs(track: BuiltRaceTrack): TrackBarrierCache {
   const cached = TRACK_BARRIER_CACHE.get(track.id);
   if (cached) return cached;
 
-  const segCount = 80;
+  const segCount = 120;
   const step = track.samples.length / segCount;
   const wallOffset = track.roadWidth / 2 + 1.05;
   const segLen = (track.totalLength / segCount) * 1.04;
@@ -213,9 +219,40 @@ export function getTrackBarrierObbs(track: BuiltRaceTrack): TrackBarrierCache {
   return cache;
 }
 
+export interface CityBounds2D {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+  centerX: number;
+  centerZ: number;
+  width: number;
+  depth: number;
+}
+
+let customCityBounds: CityBounds2D | null = null;
+let customCityObstacleObbs: OBB2D[] | null = null;
+
+export function setCustomCityBounds(bounds: CityBounds2D | null) {
+  customCityBounds = bounds;
+}
+
+export function getCustomCityBounds(): CityBounds2D | null {
+  return customCityBounds;
+}
+
+export function setCustomCityObstacleObbs(obbs: OBB2D[] | null) {
+  customCityObstacleObbs = obbs;
+}
+
+export function getCustomCityObstacleObbs(): OBB2D[] | null {
+  return customCityObstacleObbs;
+}
+
 let FREE_ROAM_OBB_CACHE: OBB2D[] | null = null;
 
 export function getFreeRoamObstacleObbs(): OBB2D[] {
+  if (customCityObstacleObbs) return customCityObstacleObbs;
   if (FREE_ROAM_OBB_CACHE) return FREE_ROAM_OBB_CACHE;
 
   const list: OBB2D[] = [];
@@ -233,7 +270,55 @@ export function getFreeRoamObstacleObbs(): OBB2D[] {
     });
   }
 
-  // Outer perimeter boundary walls of the 560x560 city
+  // Ground-level Shipping Containers (only bottom-tier containers y < 2)
+  for (const c of FREE_ROAM_CONTAINERS) {
+    if (c.y > 2.2) continue;
+    const fx = -Math.sin(c.rotationY);
+    const fz = -Math.cos(c.rotationY);
+    list.push({
+      cx: c.x,
+      cz: c.z,
+      ux: -fz,
+      uz: fx,
+      fx,
+      fz,
+      halfW: 1.25,
+      halfL: 3.1,
+    });
+  }
+
+  // Static Parked Cars
+  for (const p of FREE_ROAM_PARKED_CARS) {
+    const fx = -Math.sin(p.rotationY);
+    const fz = -Math.cos(p.rotationY);
+    list.push({
+      cx: p.x,
+      cz: p.z,
+      ux: -fz,
+      uz: fx,
+      fx,
+      fz,
+      halfW: 0.95,
+      halfL: 2.15,
+    });
+  }
+
+  // Tree trunks in parks, yards, and greenbelts
+  for (const t of FREE_ROAM_TREES) {
+    const r = 0.42 * t.scale;
+    list.push({
+      cx: t.x,
+      cz: t.z,
+      ux: 1,
+      uz: 0,
+      fx: 0,
+      fz: -1,
+      halfW: r,
+      halfL: r,
+    });
+  }
+
+  // Outer perimeter boundary walls of the 1120x1120 city
   list.push(
     {
       cx: FREE_ROAM_BOUNDS.centerX,

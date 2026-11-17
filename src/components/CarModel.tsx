@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useKeyboardControls } from '@react-three/drei';
 import { RigidBody, RapierRigidBody, CuboidCollider } from '@react-three/rapier';
@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { useGameStore } from '../store';
 import { createCarGeometrySet, disposeCarGeometrySet } from '../utils/carGeometry';
 import { carTelemetry, raceTelemetry, resetCarTelemetry, resetRaceTelemetry } from '../utils/freeRoamWorld';
+import { MAX_TRAFFIC_CARS, trafficVehicles } from '../utils/freeRoamTraffic';
 import { getCarPerformanceSpecs, TARGET_ZERO_TO_SIXTY_MS } from '../utils/carTuning';
 import { engineAudio } from '../utils/engineAudio';
 import { findNearestTrackSample, getBuiltRaceTrack } from '../utils/raceTracks';
@@ -18,7 +19,11 @@ import {
   testObbOverlap,
 } from '../utils/collisionPhysics';
 import { clearScrapeSparks, emitCarScrapeSparks } from './ScrapeSparks';
-import { TURNTABLE_CONFIG } from '../utils/turntableConfig';
+import {
+  TURNTABLE_CONFIG,
+  getTurntableShowcaseQuaternion,
+  registerTurntableVehicleReset,
+} from '../utils/turntableConfig';
 
 const GEAR_MAX_SPEED_FRACS = [0.16, 0.28, 0.43, 0.6, 0.8, 1.0] as const;
 const _spawnYAxis = new THREE.Vector3(0, 1, 0);
@@ -158,6 +163,7 @@ export function CarModel({ isInteractive }: CarModelProps) {
   const isPaused = useGameStore((state) => state.isPaused);
   const togglePause = useGameStore((state) => state.togglePause);
   const turntableResetId = useGameStore((state) => state.turntableResetId);
+  const menuTransitionPhase = useGameStore((state) => state.menuTransitionPhase);
 
   const activeTrack = useMemo(() => getBuiltRaceTrack(activeTrackId), [activeTrackId]);
 
@@ -215,11 +221,69 @@ export function CarModel({ isInteractive }: CarModelProps) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [view, raceState, togglePause]);
 
-  // Reset car position & dynamics cleanly whenever switching modes or starting a race
-  useEffect(() => {
+  const resetVehicleToTurntable = useCallback(() => {
     steerAngleRef.current = 0;
     steerInputSmoothRef.current = 0;
     yawRateRef.current = 0;
+    wheelSpinAngleRef.current = 0;
+    bodyRollRef.current = 0;
+    bodyPitchRef.current = 0;
+    currentGearRef.current = 0;
+    countdownRevRpmRef.current = 0.16;
+    camInitializedRef.current = false;
+    lapProgressRef.current = { sampleIdx: 0, lap: 0 };
+    launchClockRef.current = { active: false, elapsed: 0, lastSplit: null };
+
+    for (let i = 0; i < 4; i++) {
+      const w = wheelSpinRefs.current[i];
+      if (w) w.rotation.x = 0;
+    }
+    if (frontLeftSteerRef.current) frontLeftSteerRef.current.rotation.y = 0;
+    if (frontRightSteerRef.current) frontRightSteerRef.current.rotation.y = 0;
+    if (chassisVisualRef.current) chassisVisualRef.current.rotation.set(0, 0, 0);
+
+    // Return brake lights to idle glow
+    if (tailBarMatRef.current) tailBarMatRef.current.emissiveIntensity = 1.8;
+    if (tailLeftMatRef.current) tailLeftMatRef.current.emissiveIntensity = 2.07;
+    if (tailRightMatRef.current) tailRightMatRef.current.emissiveIntensity = 2.07;
+
+    clearScrapeSparks();
+    resetCarTelemetry();
+    engineAudio.stopAll();
+    engineAudio.stopAudition();
+    useGameStore.getState().setCurrentSpeed(0);
+
+    if (bodyRef.current) {
+      const pos = TURNTABLE_CONFIG.defaultTurntablePosition;
+      const quat = getTurntableShowcaseQuaternion();
+      const quatObj = { x: quat.x, y: quat.y, z: quat.z, w: quat.w };
+
+      bodyRef.current.setTranslation(pos, true);
+      bodyRef.current.setRotation(quatObj, true);
+      bodyRef.current.setNextKinematicTranslation(pos);
+      bodyRef.current.setNextKinematicRotation(quatObj);
+      bodyRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      bodyRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      bodyRef.current.wakeUp();
+    }
+  }, []);
+
+  useEffect(() => {
+    registerTurntableVehicleReset(resetVehicleToTurntable);
+    return () => registerTurntableVehicleReset(null);
+  }, [resetVehicleToTurntable]);
+
+  // Reset car position & dynamics cleanly whenever switching modes, starting a race, or resetting turntable
+  useEffect(() => {
+    if (!isInteractive) {
+      resetVehicleToTurntable();
+      return;
+    }
+
+    steerAngleRef.current = 0;
+    steerInputSmoothRef.current = 0;
+    yawRateRef.current = 0;
+    wheelSpinAngleRef.current = 0;
     bodyRollRef.current = 0;
     bodyPitchRef.current = 0;
     currentGearRef.current = 0;
@@ -240,9 +304,16 @@ export function CarModel({ isInteractive }: CarModelProps) {
       );
     }
 
+    for (let i = 0; i < 4; i++) {
+      const w = wheelSpinRefs.current[i];
+      if (w) w.rotation.x = 0;
+    }
     if (frontLeftSteerRef.current) frontLeftSteerRef.current.rotation.y = 0;
     if (frontRightSteerRef.current) frontRightSteerRef.current.rotation.y = 0;
     if (chassisVisualRef.current) chassisVisualRef.current.rotation.set(0, 0, 0);
+    if (tailBarMatRef.current) tailBarMatRef.current.emissiveIntensity = 1.8;
+    if (tailLeftMatRef.current) tailLeftMatRef.current.emissiveIntensity = 2.07;
+    if (tailRightMatRef.current) tailRightMatRef.current.emissiveIntensity = 2.07;
 
     if (bodyRef.current) {
       if (view === 'RACE') {
@@ -263,15 +334,14 @@ export function CarModel({ isInteractive }: CarModelProps) {
         carTelemetry.fz = startSample.tangent.z;
         carTelemetry.headingRad = Math.atan2(startSample.tangent.x, -startSample.tangent.z);
       } else {
-        bodyRef.current.setTranslation({ x: 0, y: isInteractive ? 0.08 : 0.0, z: 0 }, true);
+        bodyRef.current.setTranslation({ x: 0, y: 0.08, z: 0 }, true);
         bodyRef.current.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
       }
-      if (isInteractive) {
-        bodyRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
-        bodyRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
-      }
+      bodyRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      bodyRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      bodyRef.current.wakeUp();
     }
-  }, [view, isInteractive, activeTrack, raceSessionId]);
+  }, [view, isInteractive, activeTrack, raceSessionId, turntableResetId, resetVehicleToTurntable]);
 
   // Derive calibrated 5-tier physics stats from Garage upgrades and vehicle model traits
   const specs = useMemo(
@@ -293,6 +363,11 @@ export function CarModel({ isInteractive }: CarModelProps) {
 
   useFrame((state, delta) => {
     const dt = Math.min(delta, 0.05);
+
+    // Ensure Rapier syncs the snapped showroom turntable transform to the visual Object3D while covered
+    if (!isInteractive && bodyRef.current && menuTransitionPhase === 'covered') {
+      bodyRef.current.wakeUp();
+    }
 
     if (!isInteractive || !bodyRef.current || isPaused) {
       return;
@@ -646,6 +721,76 @@ export function CarModel({ isInteractive }: CarModelProps) {
         newVz = _velSlideOut.vz;
       }
     } else if (view === 'FREE_ROAM') {
+      // Check player collisions against active Free Roam AI traffic cars
+      const activeTrafficLimit = Math.min(useGameStore.getState().trafficCount, MAX_TRAFFIC_CARS);
+      for (let i = 0; i < activeTrafficLimit; i++) {
+        const tv = trafficVehicles[i];
+        if (!tv.active) continue;
+        const tvFx = -Math.sin(tv.yaw);
+        const tvFz = -Math.cos(tv.yaw);
+        buildVehicleObb(tv.x, tv.z, tvFx, tvFz, _botObb, 0.96, 2.20);
+
+        const hit = testObbOverlap(_playerObb, _botObb);
+        if (hit.hit) {
+          const playerPush = hit.depth * 0.52 + 0.006;
+          const trafficPush = hit.depth * 0.52 + 0.01;
+          posX += hit.nx * playerPush;
+          posZ += hit.nz * playerPush;
+          _playerObb.cx = posX;
+          _playerObb.cz = posZ;
+          posModified = true;
+
+          tv.x -= hit.nx * trafficPush;
+          tv.z -= hit.nz * trafficPush;
+
+          const relVx = newVx - tv.vx;
+          const relVz = newVz - tv.vz;
+          const relVn = relVx * hit.nx + relVz * hit.nz;
+          const closingSpeed = relVn < 0 ? -relVn : 0;
+
+          if (relVn < 0) {
+            const impulse = 0.68 * -relVn + 0.8;
+            newVx += hit.nx * impulse;
+            newVz += hit.nz * impulse;
+            const tvImpulse = Math.max(3.5, closingSpeed * 0.9);
+            tv.bumpVx -= hit.nx * tvImpulse;
+            tv.bumpVz -= hit.nz * tvImpulse;
+          } else {
+            newVx += hit.nx * 0.7;
+            newVz += hit.nz * 0.7;
+            tv.bumpVx -= hit.nx * 2.4;
+            tv.bumpVz -= hit.nz * 2.4;
+          }
+          newVx *= 0.96;
+          newVz *= 0.96;
+
+          const rx = hit.contactX - tv.x;
+          const rz = hit.contactZ - tv.z;
+          const torque = rx * -hit.nz - rz * -hit.nx;
+          tv.yawVel = THREE.MathUtils.clamp(
+            tv.yawVel + torque * Math.max(0.6, closingSpeed * 0.14),
+            -4.5,
+            4.5,
+          );
+          tv.currentSpeed *= 0.45;
+
+          const peakSpeed = Math.max(Math.hypot(newVx, newVz), Math.hypot(tv.vx, tv.vz));
+          if (peakSpeed >= 4.0) {
+            const sparkCount = 4 + Math.min(7, Math.round((peakSpeed - 4.0) * 0.2));
+            emitCarScrapeSparks(
+              hit.contactX,
+              0.48,
+              hit.contactZ,
+              newVx,
+              newVz,
+              hit.nx,
+              hit.nz,
+              sparkCount,
+            );
+          }
+        }
+      }
+
       const obstacles = getFreeRoamObstacleObbs();
       for (let i = 0; i < obstacles.length; i++) {
         const hit = testObbOverlap(_playerObb, obstacles[i]);
@@ -1040,25 +1185,67 @@ export function CarModel({ isInteractive }: CarModelProps) {
             </group>
           ))}
 
-          {/* GT Rear Wing / Spoiler (Shinobi RX gets elevated high-downforce tuner wing) */}
-          <group position={[0, selectedCarId === 'shinobi_rx' ? 0.98 : 0.85, 1.92]}>
+          {/* GT Rear Wing / Spoiler (Customized per chassis tier) */}
+          <group
+            position={[
+              0,
+              selectedCarId === 'shinobi_rx' || selectedCarId === 'tempest_gt3'
+                ? 0.98
+                : selectedCarId === 'hyperion_lm'
+                ? 1.02
+                : 0.85,
+              1.92,
+            ]}
+          >
             {/* Dual Upright Struts */}
             {[-0.48, 0.48].map((x, i) => (
               <mesh
                 key={`strut-${i}`}
-                position={[x, selectedCarId === 'shinobi_rx' ? 0.22 : 0.13, 0]}
+                position={[
+                  x,
+                  selectedCarId === 'shinobi_rx' || selectedCarId === 'tempest_gt3'
+                    ? 0.22
+                    : selectedCarId === 'hyperion_lm'
+                    ? 0.24
+                    : 0.13,
+                  0,
+                ]}
                 rotation={[0.18, 0, 0]}
                 castShadow
               >
-                <boxGeometry args={[0.045, selectedCarId === 'shinobi_rx' ? 0.46 : 0.28, 0.16]} />
+                <boxGeometry
+                  args={[
+                    0.045,
+                    selectedCarId === 'shinobi_rx' || selectedCarId === 'tempest_gt3'
+                      ? 0.46
+                      : selectedCarId === 'hyperion_lm'
+                      ? 0.50
+                      : 0.28,
+                    0.16,
+                  ]}
+                />
                 <meshStandardMaterial color="#18181b" roughness={0.5} metalness={0.4} />
               </mesh>
             ))}
             {/* Wing Airfoil Blade */}
             <mesh
               geometry={geometries.rearWingBlade}
-              position={[0, selectedCarId === 'shinobi_rx' ? 0.44 : 0.26, 0.03]}
-              scale={selectedCarId === 'shinobi_rx' ? [1.12, 1.25, 1.1] : [1, 1, 1]}
+              position={[
+                0,
+                selectedCarId === 'shinobi_rx' || selectedCarId === 'tempest_gt3'
+                  ? 0.44
+                  : selectedCarId === 'hyperion_lm'
+                  ? 0.48
+                  : 0.26,
+                0.03,
+              ]}
+              scale={
+                selectedCarId === 'hyperion_lm'
+                  ? [1.18, 1.32, 1.22]
+                  : selectedCarId === 'shinobi_rx' || selectedCarId === 'tempest_gt3'
+                  ? [1.12, 1.25, 1.1]
+                  : [1, 1, 1]
+              }
               castShadow
             >
               <meshPhysicalMaterial
@@ -1072,11 +1259,29 @@ export function CarModel({ isInteractive }: CarModelProps) {
             {[-0.94, 0.94].map((x, i) => (
               <mesh
                 key={`endplate-${i}`}
-                position={[x, selectedCarId === 'shinobi_rx' ? 0.44 : 0.26, 0.03]}
+                position={[
+                  selectedCarId === 'hyperion_lm' ? x * 1.08 : x,
+                  selectedCarId === 'shinobi_rx' || selectedCarId === 'tempest_gt3'
+                    ? 0.44
+                    : selectedCarId === 'hyperion_lm'
+                    ? 0.48
+                    : 0.26,
+                  0.03,
+                ]}
                 castShadow
               >
                 <boxGeometry
-                  args={[0.03, selectedCarId === 'shinobi_rx' ? 0.28 : 0.17, selectedCarId === 'shinobi_rx' ? 0.56 : 0.44]}
+                  args={[
+                    0.03,
+                    selectedCarId === 'hyperion_lm'
+                      ? 0.34
+                      : selectedCarId === 'shinobi_rx' || selectedCarId === 'tempest_gt3'
+                      ? 0.28
+                      : 0.17,
+                    selectedCarId === 'shinobi_rx' || selectedCarId === 'tempest_gt3' || selectedCarId === 'hyperion_lm'
+                      ? 0.58
+                      : 0.44,
+                  ]}
                 />
                 <meshPhysicalMaterial
                   color={carSettings.color}
@@ -1177,6 +1382,95 @@ export function CarModel({ isInteractive }: CarModelProps) {
               <mesh position={[0, 0.20, -2.18]} castShadow>
                 <boxGeometry args={[1.82, 0.038, 0.36]} />
                 <meshStandardMaterial color="#18181b" metalness={0.7} roughness={0.3} />
+              </mesh>
+            </group>
+          )}
+
+          {/* --- TEMPEST GT3-R CIRCUIT RACER SPECIAL ITEMS --- */}
+          {selectedCarId === 'tempest_gt3' && (
+            <group>
+              {/* Front GT3 Aero Splitter Extension + Dual Dive Planes */}
+              <mesh position={[0, 0.19, -2.20]} castShadow>
+                <boxGeometry args={[1.98, 0.042, 0.42]} />
+                <meshStandardMaterial color="#141418" metalness={0.65} roughness={0.32} />
+              </mesh>
+              {[-0.94, 0.94].map((x, i) => (
+                <mesh
+                  key={`gt3-dive-${i}`}
+                  position={[x, 0.39, -2.06]}
+                  rotation={[0.12, x < 0 ? -0.2 : 0.2, x < 0 ? -0.15 : 0.15]}
+                  castShadow
+                >
+                  <boxGeometry args={[0.24, 0.022, 0.18]} />
+                  <meshStandardMaterial color="#18181b" metalness={0.7} roughness={0.25} />
+                </mesh>
+              ))}
+              {/* Central Deep Hood Endurance Radiator Vent */}
+              <mesh position={[0, 0.69, -1.44]} rotation={[0.15, 0, 0]}>
+                <boxGeometry args={[0.68, 0.045, 0.48]} />
+                <meshStandardMaterial color="#09090b" roughness={0.85} metalness={0.2} />
+              </mesh>
+              {/* Side Rocker Aero Blades */}
+              {[-0.97, 0.97].map((x, i) => (
+                <mesh key={`gt3-skirt-${i}`} position={[x, 0.18, 0]} castShadow>
+                  <boxGeometry args={[0.14, 0.035, 2.05]} />
+                  <meshStandardMaterial color="#18181b" metalness={0.6} roughness={0.3} />
+                </mesh>
+              ))}
+              {/* GT3 Fender Louver Vents */}
+              {[-0.78, 0.78].map((x, i) => (
+                <mesh key={`gt3-fender-${i}`} position={[x, 0.74, -1.35]} rotation={[0.08, 0, 0]}>
+                  <boxGeometry args={[0.24, 0.02, 0.34]} />
+                  <meshStandardMaterial color="#09090b" roughness={0.8} metalness={0.3} />
+                </mesh>
+              ))}
+            </group>
+          )}
+
+          {/* --- HYPERION LM-X HYBRID HYPER-PROTOTYPE SPECIAL ITEMS --- */}
+          {selectedCarId === 'hyperion_lm' && (
+            <group>
+              {/* Roof Snorkel Intake + Le Mans Dorsal Shark Fin */}
+              <mesh position={[0, 1.28, -0.04]} castShadow>
+                <boxGeometry args={[0.26, 0.14, 0.56]} />
+                <meshStandardMaterial color="#18181b" metalness={0.75} roughness={0.25} />
+              </mesh>
+              <mesh position={[0, 1.24, 0.92]} castShadow>
+                <boxGeometry args={[0.045, 0.32, 1.48]} />
+                <meshPhysicalMaterial
+                  color={carSettings.color}
+                  metalness={0.72}
+                  roughness={0.2}
+                  clearcoat={1.0}
+                />
+              </mesh>
+              {/* Wide Prototype Sculpted Rear Haunches */}
+              {[-0.98, 0.98].map((x, i) => (
+                <mesh key={`lm-haunch-${i}`} position={[x, 0.60, 1.22]} castShadow>
+                  <boxGeometry args={[0.18, 0.32, 1.22]} />
+                  <meshPhysicalMaterial
+                    color={carSettings.color}
+                    metalness={0.72}
+                    roughness={0.2}
+                    clearcoat={1.0}
+                  />
+                </mesh>
+              ))}
+              {/* Central Hybrid Plasma Exhaust Cone */}
+              <mesh position={[0, 0.34, 2.24]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+                <cylinderGeometry args={[0.11, 0.13, 0.16, 20]} />
+                <meshStandardMaterial
+                  color="#c084fc"
+                  emissive="#a855f7"
+                  emissiveIntensity={0.85}
+                  metalness={0.9}
+                  roughness={0.15}
+                />
+              </mesh>
+              {/* Deep Ground-Effect Front Undertray & Canards */}
+              <mesh position={[0, 0.18, -2.24]} castShadow>
+                <boxGeometry args={[2.04, 0.04, 0.46]} />
+                <meshStandardMaterial color="#111115" metalness={0.75} roughness={0.28} />
               </mesh>
             </group>
           )}
